@@ -121,8 +121,8 @@ export default function DashboardClient() {
               <button
                 key={tile.label}
                 type="button"
-                className={`tile-spend group relative p-4 text-left ${
-                  activeTile?.label === tile.label ? "border-mint" : ""
+                className={`tile-spend relative z-0 p-4 text-left hover:z-10 ${
+                  activeTile?.label === tile.label ? "z-10 border-mint" : ""
                 }`}
                 onClick={() =>
                   setActiveTile((current) =>
@@ -147,23 +147,13 @@ export default function DashboardClient() {
                 <p className="mt-2 font-mono text-[10px] text-ink-soft">
                   {tile.items.length} entr{tile.items.length === 1 ? "y" : "ies"}
                 </p>
-
-                <div className="pointer-events-none absolute left-0 right-0 top-full z-20 mt-2 hidden border border-line bg-white p-3 shadow-[0_12px_30px_rgba(20,36,30,0.12)] group-hover:block">
-                  <TileDetails tile={tile} />
-                </div>
               </button>
             ))}
           </div>
         )}
 
         {activeTile ? (
-          <div className="mt-4 border border-line bg-white/70 p-4 md:hidden">
-            <TileDetails tile={activeTile} />
-          </div>
-        ) : null}
-
-        {activeTile ? (
-          <div className="mt-4 hidden border border-line bg-white/70 p-4 md:block">
+          <div className="mt-4 border border-line bg-white/70 p-4">
             <TileDetails tile={activeTile} />
           </div>
         ) : null}
