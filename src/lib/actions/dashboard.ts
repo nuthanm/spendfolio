@@ -22,7 +22,9 @@ export async function getDashboardData(monthKey?: string) {
     }),
   ]);
 
-  const incomeTotal = incomes.reduce((s, i) => s + i.amount, 0);
+  const incomeTotal = incomes
+    .filter((i) => i.recurring || i.monthKey === key)
+    .reduce((s, i) => s + i.amount, 0);
   const expenseTotal = expenses.reduce((s, e) => s + e.amount, 0);
   const health = computeHealth(incomeTotal, expenseTotal);
 
@@ -62,6 +64,9 @@ export async function getDashboardData(monthKey?: string) {
   }));
 
   const monthKeys = new Set(monthsRaw.map((m) => m.monthKey));
+  for (const income of incomes) {
+    if (income.monthKey) monthKeys.add(income.monthKey);
+  }
   monthKeys.add(currentMonthKey());
   monthKeys.add(key);
   const months = [...monthKeys].sort().reverse().map((k) => ({

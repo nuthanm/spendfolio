@@ -41,12 +41,15 @@ model IncomeSource {
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   name      String
   amount    Float
-  cadence   String   @default("Monthly")
+  recurring Boolean  @default(true)
+  cadence   String   @default("Monthly") // Monthly | Weekly | Variable — for recurring
   nextDate  String?
+  monthKey  String?  // YYYY-MM — required when recurring = false (one-time)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@index([userId])
+  @@index([userId, monthKey])
 }
 
 model Expense {
