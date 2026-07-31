@@ -9,6 +9,7 @@ import {
   listExpenses,
   listFieldDefs,
   removeFieldDef,
+  updateExpense,
 } from "@/lib/actions/expenses";
 import { DEFAULT_EXPENSE_LABELS, formatINR } from "@/lib/finance";
 import { currentMonthKey } from "@/lib/dates";
@@ -16,10 +17,30 @@ import { currentMonthKey } from "@/lib/dates";
 type Expense = Awaited<ReturnType<typeof listExpenses>>[number];
 type FieldDef = Awaited<ReturnType<typeof listFieldDefs>>[number];
 
+type FormState = {
+  date: string;
+  label: string;
+  amount: string;
+  remarks: string;
+  recurring: boolean;
+  renewalDate: string;
+};
+
+const emptyForm = (): FormState => ({
+  date: new Date().toISOString().slice(0, 10),
+  label: "Lunch",
+  amount: "",
+  remarks: "",
+  recurring: false,
+  renewalDate: "",
+});
+
 export default function ExpensesPage() {
   const [rows, setRows] = useState<Expense[]>([]);
   const [defs, setDefs] = useState<FieldDef[]>([]);
+  const [form, setForm] = useState<FormState>(emptyForm);
   const [customValues, setCustomValues] = useState<Record<string, string | boolean>>({});
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [savedFlash, setSavedFlash] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
@@ -37,37 +58,82 @@ export default function ExpensesPage() {
     refresh();
   }, []);
 
+  function startEdit(expense: Expense) {
+    setEditingId(expense.id);
+    setForm({
+      date: expense.date,
+      label: expense.label,
+      amount: String(expense.amount),
+      remarks: expense.remarks || "",
+      recurring: expense.recurring,
+      renewalDate: expense.renewalDate || "",
+    });
+    try {
+      setCustomValues(JSON.parse(expense.customFields || "{}"));
+    } catch {
+      setCustomValues({});
+    }
+    setError(null);
+  }
+
+  function cancelEdit() {
+    setEditingId(null);
+    setForm(emptyForm());
+    setCustomValues({});
+    setError(null);
+  }
+
+  function onSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    const fd = new FormData();
+    fd.set("date", form.date);
+    fd.set("label", form.label);
+    fd.set("amount", form.amount);
+    fd.set("remarks", form.remarks);
+    fd.set("recurring", form.recurring ? "true" : "false");
+    fd.set("renewalDate", form.renewalDate);
+    fd.set("customFields", JSON.stringify(customValues));
+
+    startTransition(async () => {
+      const res = editingId
+        ? await updateExpense(editingId, fd)
+        : await addExpense(fd);
+      if (res?.error) {
+        setError(res.error);
+        return;
+      }
+      setError(null);
+      setSavedFlash(true);
+      setTimeout(() => setSavedFlash(false), 1600);
+      cancelEdit();
+      refresh();
+    });
+  }
+
   return (
     <AppShell
       title="Add expense"
-      subtitle="Customizable form — start with Breakfast, Lunch, Dinner, Recharge… then add any field you need."
+      subtitle="Edit any entry. Mark recurring with a next date — those highlight in orange and appear on the dashboard."
     >
       <div className="grid gap-8 lg:grid-cols-[1fr_1fr]">
         <div className="anim-rise">
-          <form
-            className="border border-line bg-white/50 p-5"
-            onSubmit={(e) => {
-              e.preventDefault();
-              const form = e.currentTarget;
-              const fd = new FormData(form);
-              fd.set("customFields", JSON.stringify(customValues));
-              startTransition(async () => {
-                const res = await addExpense(fd);
-                if (res?.error) setError(res.error);
-                else {
-                  setError(null);
-                  setSavedFlash(true);
-                  setTimeout(() => setSavedFlash(false), 1600);
-                  form.reset();
-                  setCustomValues({});
-                  refresh();
-                }
-              });
-            }}
-          >
+          <form className="border border-line bg-white/50 p-5" onSubmit={onSubmit}>
             <div className="mb-4 flex items-center justify-between gap-3">
-              <h2 className="text-lg font-bold text-ink">Expense entry</h2>
-              {savedFlash ? <span className="font-mono text-xs text-mint">saved ✓</span> : null}
+              <h2 className="text-lg font-bold text-ink">
+                {editingId ? "Edit expense" : "Expense entry"}
+              </h2>
+              <div className="flex items-center gap-3">
+                {savedFlash ? <span className="font-mono text-xs text-mint">saved ✓</span> : null}
+                {editingId ? (
+                  <button
+                    type="button"
+                    className="text-xs text-ink-soft hover:text-ink"
+                    onClick={cancelEdit}
+                  >
+                    Cancel
+                  </button>
+                ) : null}
+              </div>
             </div>
 
             <div className="space-y-4">
@@ -78,26 +144,41 @@ export default function ExpensesPage() {
                 <input
                   className="field"
                   type="date"
-                  name="date"
                   required
-                  defaultValue={new Date().toISOString().slice(0, 10)}
+                  value={form.date}
+                  onChange={(e) => setForm((f) => ({ ...f, date: e.target.value }))}
                 />
               </label>
               <label className="block">
                 <span className="mb-1.5 block font-mono text-[11px] uppercase tracking-wider text-ink-soft">
                   Label
                 </span>
-                <select className="field" name="label" defaultValue="Lunch">
+                <select
+                  className="field"
+                  value={form.label}
+                  onChange={(e) => setForm((f) => ({ ...f, label: e.target.value }))}
+                >
                   {DEFAULT_EXPENSE_LABELS.map((l) => (
                     <option key={l}>{l}</option>
                   ))}
+                  {!(DEFAULT_EXPENSE_LABELS as readonly string[]).includes(form.label) ? (
+                    <option>{form.label}</option>
+                  ) : null}
                 </select>
               </label>
               <label className="block">
                 <span className="mb-1.5 block font-mono text-[11px] uppercase tracking-wider text-ink-soft">
                   Amount (₹)
                 </span>
-                <input className="field" type="number" name="amount" min="0" step="1" required />
+                <input
+                  className="field"
+                  type="number"
+                  min="0"
+                  step="1"
+                  required
+                  value={form.amount}
+                  onChange={(e) => setForm((f) => ({ ...f, amount: e.target.value }))}
+                />
               </label>
               <label className="block">
                 <span className="mb-1.5 block font-mono text-[11px] uppercase tracking-wider text-ink-soft">
@@ -105,16 +186,54 @@ export default function ExpensesPage() {
                 </span>
                 <textarea
                   className="field min-h-24 resize-y"
-                  name="remarks"
                   placeholder="e.g. bought domain — next renewal…"
+                  value={form.remarks}
+                  onChange={(e) => setForm((f) => ({ ...f, remarks: e.target.value }))}
                 />
               </label>
-              <label className="block">
-                <span className="mb-1.5 block font-mono text-[11px] uppercase tracking-wider text-ink-soft">
-                  Renewal date
+
+              <label className="flex items-center gap-3 border border-line px-3 py-3">
+                <input
+                  type="checkbox"
+                  checked={form.recurring}
+                  onChange={(e) =>
+                    setForm((f) => ({ ...f, recurring: e.target.checked }))
+                  }
+                />
+                <span>
+                  <span className="block text-sm font-medium text-ink">Recurring</span>
+                  <span className="text-xs text-ink-soft">
+                    Comes again next month — set the next date below
+                  </span>
                 </span>
-                <input className="field" type="date" name="renewalDate" />
               </label>
+
+              {form.recurring ? (
+                <label className="block">
+                  <span className="mb-1.5 block font-mono text-[11px] uppercase tracking-wider text-ink-soft">
+                    Next date
+                  </span>
+                  <input
+                    className="field"
+                    type="date"
+                    required={form.recurring}
+                    value={form.renewalDate}
+                    onChange={(e) => setForm((f) => ({ ...f, renewalDate: e.target.value }))}
+                  />
+                </label>
+              ) : (
+                <label className="block">
+                  <span className="mb-1.5 block font-mono text-[11px] uppercase tracking-wider text-ink-soft">
+                    Renewal date (optional)
+                  </span>
+                  <input
+                    className="field"
+                    type="date"
+                    value={form.renewalDate}
+                    onChange={(e) => setForm((f) => ({ ...f, renewalDate: e.target.value }))}
+                  />
+                </label>
+              )}
 
               {defs.map((field) => {
                 const options = JSON.parse(field.options || "[]") as string[];
@@ -169,7 +288,13 @@ export default function ExpensesPage() {
                     ) : (
                       <input
                         className="field"
-                        type={field.type === "number" ? "number" : field.type === "date" ? "date" : "text"}
+                        type={
+                          field.type === "number"
+                            ? "number"
+                            : field.type === "date"
+                              ? "date"
+                              : "text"
+                        }
                         value={String(customValues[field.id] ?? "")}
                         onChange={(e) =>
                           setCustomValues((v) => ({ ...v, [field.id]: e.target.value }))
@@ -187,7 +312,7 @@ export default function ExpensesPage() {
               disabled={pending}
               className="btn-primary mt-5 w-full py-3 text-sm font-medium disabled:opacity-60"
             >
-              Save expense
+              {editingId ? "Save changes" : "Save expense"}
             </button>
           </form>
 
@@ -195,11 +320,11 @@ export default function ExpensesPage() {
             className="mt-4 border border-dashed border-mint/50 bg-mint/5 p-4"
             onSubmit={(e) => {
               e.preventDefault();
-              const form = e.currentTarget;
-              const fd = new FormData(form);
+              const formEl = e.currentTarget;
+              const fd = new FormData(formEl);
               startTransition(async () => {
                 await addFieldDef(fd);
-                form.reset();
+                formEl.reset();
                 refresh();
               });
             }}
@@ -234,7 +359,11 @@ export default function ExpensesPage() {
               <li
                 key={e.id}
                 className={`border border-line bg-white/50 px-4 py-3 ${
-                  e.renewalDate ? "highlight-renewal" : ""
+                  e.recurring
+                    ? "highlight-recurring"
+                    : e.renewalDate
+                      ? "highlight-renewal"
+                      : ""
                 }`}
               >
                 <div className="flex items-start justify-between gap-3">
@@ -244,7 +373,11 @@ export default function ExpensesPage() {
                       <span className="font-mono text-xs font-normal text-ink-soft">{e.date}</span>
                     </p>
                     {e.remarks ? <p className="mt-1 text-sm text-ink-soft">{e.remarks}</p> : null}
-                    {e.renewalDate ? (
+                    {e.recurring && e.renewalDate ? (
+                      <p className="mt-1 font-mono text-[11px] text-[#c45f12]">
+                        recurring · next {e.renewalDate}
+                      </p>
+                    ) : e.renewalDate ? (
                       <p className="mt-1 font-mono text-[11px] text-coral">
                         renewal · {e.renewalDate}
                       </p>
@@ -252,18 +385,28 @@ export default function ExpensesPage() {
                   </div>
                   <div className="text-right">
                     <p className="font-mono text-sm font-semibold">{formatINR(e.amount)}</p>
-                    <button
-                      type="button"
-                      className="mt-1 text-xs text-coral"
-                      onClick={() =>
-                        startTransition(async () => {
-                          await deleteExpense(e.id);
-                          refresh();
-                        })
-                      }
-                    >
-                      Delete
-                    </button>
+                    <div className="mt-1 flex justify-end gap-2">
+                      <button
+                        type="button"
+                        className="text-xs text-mint"
+                        onClick={() => startEdit(e)}
+                      >
+                        Edit
+                      </button>
+                      <button
+                        type="button"
+                        className="text-xs text-coral"
+                        onClick={() =>
+                          startTransition(async () => {
+                            await deleteExpense(e.id);
+                            if (editingId === e.id) cancelEdit();
+                            refresh();
+                          })
+                        }
+                      >
+                        Delete
+                      </button>
+                    </div>
                   </div>
                 </div>
               </li>

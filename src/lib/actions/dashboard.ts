@@ -8,7 +8,7 @@ export async function getDashboardData(monthKey?: string) {
   const user = await requireUser();
   const key = monthKey || currentMonthKey();
 
-  const [incomes, expenses, monthsRaw] = await Promise.all([
+  const [incomes, expenses, monthsRaw, recurringExpenses] = await Promise.all([
     prisma.incomeSource.findMany({ where: { userId: user.id } }),
     prisma.expense.findMany({
       where: { userId: user.id, monthKey: key },
@@ -20,6 +20,15 @@ export async function getDashboardData(monthKey?: string) {
       distinct: ["monthKey"],
       orderBy: { monthKey: "desc" },
     }),
+    prisma.expense.findMany({
+      where: {
+        userId: user.id,
+        recurring: true,
+        renewalDate: { not: null },
+      },
+      orderBy: { renewalDate: "asc" },
+      take: 12,
+    }),
   ]);
 
   const incomeTotal = incomes
@@ -28,15 +37,31 @@ export async function getDashboardData(monthKey?: string) {
   const expenseTotal = expenses.reduce((s, e) => s + e.amount, 0);
   const health = computeHealth(incomeTotal, expenseTotal);
 
-  const tileMap = new Map<string, number>();
+  const tileMap = new Map<
+    string,
+    {
+      amount: number;
+      items: { id: string; date: string; amount: number; remarks: string; recurring: boolean }[];
+    }
+  >();
   for (const e of expenses) {
-    tileMap.set(e.label, (tileMap.get(e.label) || 0) + e.amount);
+    const bucket = tileMap.get(e.label) || { amount: 0, items: [] };
+    bucket.amount += e.amount;
+    bucket.items.push({
+      id: e.id,
+      date: e.date,
+      amount: e.amount,
+      remarks: e.remarks,
+      recurring: e.recurring,
+    });
+    tileMap.set(e.label, bucket);
   }
   const tiles = [...tileMap.entries()]
-    .map(([label, amount]) => ({
+    .map(([label, bucket]) => ({
       label,
-      amount,
-      share: expenseTotal > 0 ? Math.round((amount / expenseTotal) * 100) : 0,
+      amount: bucket.amount,
+      share: expenseTotal > 0 ? Math.round((bucket.amount / expenseTotal) * 100) : 0,
+      items: bucket.items.sort((a, b) => b.date.localeCompare(a.date)),
     }))
     .sort((a, b) => b.amount - a.amount);
 
@@ -61,6 +86,16 @@ export async function getDashboardData(monthKey?: string) {
     due: e.renewalDate!,
     daysLeft: daysUntil(e.renewalDate) ?? 999,
     remarks: e.remarks,
+    recurring: e.recurring,
+  }));
+
+  const recurringTiles = recurringExpenses.map((e) => ({
+    id: e.id,
+    title: e.label,
+    amount: e.amount,
+    nextDate: e.renewalDate!,
+    daysLeft: daysUntil(e.renewalDate) ?? 999,
+    remarks: e.remarks,
   }));
 
   const monthKeys = new Set(monthsRaw.map((m) => m.monthKey));
@@ -82,6 +117,7 @@ export async function getDashboardData(monthKey?: string) {
     expenseTotal,
     health,
     tiles,
+    recurringTiles,
     renewals,
     recent: expenses.slice(0, 8),
     months,

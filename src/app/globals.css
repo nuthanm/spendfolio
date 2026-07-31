@@ -175,6 +175,12 @@ body {
   background: linear-gradient(90deg, rgba(212, 85, 58, 0.08), transparent 70%);
 }
 
+.highlight-recurring {
+  box-shadow: inset 3px 0 0 #e67e22;
+  background: linear-gradient(90deg, rgba(230, 126, 34, 0.12), transparent 70%);
+  border-color: rgba(230, 126, 34, 0.35);
+}
+
 .status-safe {
   color: var(--safe);
   background: rgba(26, 143, 110, 0.12);

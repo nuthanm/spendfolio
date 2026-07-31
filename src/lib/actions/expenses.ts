@@ -4,6 +4,35 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db";
 import { monthKeyFromDate, requireUser } from "@/lib/auth";
 
+function parseExpenseForm(formData: FormData) {
+  const date = String(formData.get("date") || "");
+  const label = String(formData.get("label") || "").trim();
+  const amount = Number(formData.get("amount") || 0);
+  const remarks = String(formData.get("remarks") || "");
+  const recurring = String(formData.get("recurring") || "false") === "true";
+  const renewalDate = String(formData.get("renewalDate") || "") || null;
+  const customRaw = String(formData.get("customFields") || "{}");
+
+  let customFields = "{}";
+  try {
+    customFields = JSON.stringify(JSON.parse(customRaw));
+  } catch {
+    customFields = "{}";
+  }
+
+  return { date, label, amount, remarks, recurring, renewalDate, customFields };
+}
+
+function validateExpense(data: ReturnType<typeof parseExpenseForm>) {
+  if (!data.date || !data.label || !(data.amount >= 0)) {
+    return "Date, label, and amount are required.";
+  }
+  if (data.recurring && !data.renewalDate) {
+    return "Set the next date for a recurring expense.";
+  }
+  return null;
+}
+
 export async function listExpenses(monthKey?: string) {
   const user = await requireUser();
   return prisma.expense.findMany({
@@ -63,36 +92,37 @@ export async function removeFieldDef(id: string) {
 
 export async function addExpense(formData: FormData) {
   const user = await requireUser();
-  const date = String(formData.get("date") || "");
-  const label = String(formData.get("label") || "").trim();
-  const amount = Number(formData.get("amount") || 0);
-  const remarks = String(formData.get("remarks") || "");
-  const renewalDate = String(formData.get("renewalDate") || "") || null;
-  const customRaw = String(formData.get("customFields") || "{}");
-
-  if (!date || !label || !(amount >= 0)) {
-    return { error: "Date, label, and amount are required." };
-  }
-
-  let customFields = "{}";
-  try {
-    customFields = JSON.stringify(JSON.parse(customRaw));
-  } catch {
-    customFields = "{}";
-  }
+  const data = parseExpenseForm(formData);
+  const error = validateExpense(data);
+  if (error) return { error };
 
   await prisma.expense.create({
     data: {
       userId: user.id,
-      date,
-      label,
-      amount,
-      remarks,
-      renewalDate,
-      customFields,
-      monthKey: monthKeyFromDate(date),
+      ...data,
+      monthKey: monthKeyFromDate(data.date),
     },
   });
+
+  revalidatePath("/expenses");
+  revalidatePath("/dashboard");
+  return { ok: true };
+}
+
+export async function updateExpense(id: string, formData: FormData) {
+  const user = await requireUser();
+  const data = parseExpenseForm(formData);
+  const error = validateExpense(data);
+  if (error) return { error };
+
+  const result = await prisma.expense.updateMany({
+    where: { id, userId: user.id },
+    data: {
+      ...data,
+      monthKey: monthKeyFromDate(data.date),
+    },
+  });
+  if (result.count === 0) return { error: "Expense not found." };
 
   revalidatePath("/expenses");
   revalidatePath("/dashboard");
@@ -126,6 +156,7 @@ export async function commitImportRows(
       label: r.label || "Other",
       amount: Number(r.amount) || 0,
       remarks: r.remarks || "",
+      recurring: Boolean(r.renewalDate),
       renewalDate: r.renewalDate || null,
       customFields: "{}",
       monthKey: monthKeyFromDate(r.date),

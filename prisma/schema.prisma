@@ -60,7 +60,8 @@ model Expense {
   label        String
   amount       Float
   remarks      String   @default("")
-  renewalDate  String?
+  recurring    Boolean  @default(false)
+  renewalDate  String?  // next due / next month date when recurring
   customFields String   @default("{}") // JSON
   monthKey     String   // YYYY-MM
   createdAt    DateTime @default(now())
@@ -68,6 +69,7 @@ model Expense {
 
   @@index([userId, monthKey])
   @@index([userId, renewalDate])
+  @@index([userId, recurring])
 }
 
 model CustomFieldDef {

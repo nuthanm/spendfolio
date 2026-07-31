@@ -8,6 +8,7 @@ import { getDashboardData } from "@/lib/actions/dashboard";
 import { formatINR } from "@/lib/finance";
 
 type Dash = Awaited<ReturnType<typeof getDashboardData>>;
+type Tile = Dash["tiles"][number];
 
 export default function DashboardClient() {
   const search = useSearchParams();
@@ -15,11 +16,13 @@ export default function DashboardClient() {
   const initialMonth = search.get("month") || undefined;
   const [data, setData] = useState<Dash | null>(null);
   const [pending, startTransition] = useTransition();
+  const [activeTile, setActiveTile] = useState<Tile | null>(null);
 
   useEffect(() => {
     startTransition(async () => {
       const d = await getDashboardData(initialMonth);
       setData(d);
+      setActiveTile(null);
     });
   }, [initialMonth]);
 
@@ -74,17 +77,60 @@ export default function DashboardClient() {
         </div>
       </section>
 
+      {data.recurringTiles.length > 0 ? (
+        <section className="mt-10 anim-rise-delay-2">
+          <div className="mb-4 flex items-end justify-between gap-4">
+            <h2 className="text-xl font-bold text-ink">Upcoming recurring</h2>
+            <p className="font-mono text-xs text-[#c45f12]">orange · next dates</p>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            {data.recurringTiles.map((tile) => (
+              <div
+                key={tile.id}
+                className="border border-[#e67e22]/40 bg-[rgba(230,126,34,0.08)] p-3"
+              >
+                <p className="text-sm font-semibold text-ink">{tile.title}</p>
+                <p className="mt-1 font-mono text-lg font-bold text-ink">
+                  {formatINR(tile.amount)}
+                </p>
+                <p className="mt-1 font-mono text-[11px] text-[#c45f12]">
+                  next {tile.nextDate}
+                  {tile.daysLeft <= 30 ? ` · ${tile.daysLeft}d` : ""}
+                </p>
+                {tile.remarks ? (
+                  <p className="mt-1 line-clamp-2 text-xs text-ink-soft">{tile.remarks}</p>
+                ) : null}
+              </div>
+            ))}
+          </div>
+        </section>
+      ) : null}
+
       <section className="mt-10 anim-rise-delay-2">
         <div className="mb-4 flex items-end justify-between gap-4">
           <h2 className="text-xl font-bold text-ink">Where money went</h2>
-          <p className="font-mono text-xs text-ink-soft">tiles · {data.monthLabel}</p>
+          <p className="font-mono text-xs text-ink-soft">
+            hover or click a tile · {data.monthLabel}
+          </p>
         </div>
         {data.tiles.length === 0 ? (
           <p className="text-sm text-ink-soft">No expenses recorded for this month yet.</p>
         ) : (
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             {data.tiles.map((tile) => (
-              <div key={tile.label} className="tile-spend p-4">
+              <button
+                key={tile.label}
+                type="button"
+                className={`tile-spend group relative p-4 text-left ${
+                  activeTile?.label === tile.label ? "border-mint" : ""
+                }`}
+                onClick={() =>
+                  setActiveTile((current) =>
+                    current?.label === tile.label ? null : tile,
+                  )
+                }
+                onMouseEnter={() => setActiveTile(tile)}
+              >
                 <div className="flex items-start justify-between gap-2">
                   <p className="font-medium text-ink">{tile.label}</p>
                   <span className="font-mono text-[11px] text-ink-soft">{tile.share}%</span>
@@ -98,10 +144,29 @@ export default function DashboardClient() {
                     style={{ width: `${Math.min(100, tile.share * 2.8)}%` }}
                   />
                 </div>
-              </div>
+                <p className="mt-2 font-mono text-[10px] text-ink-soft">
+                  {tile.items.length} entr{tile.items.length === 1 ? "y" : "ies"}
+                </p>
+
+                <div className="pointer-events-none absolute left-0 right-0 top-full z-20 mt-2 hidden border border-line bg-white p-3 shadow-[0_12px_30px_rgba(20,36,30,0.12)] group-hover:block">
+                  <TileDetails tile={tile} />
+                </div>
+              </button>
             ))}
           </div>
         )}
+
+        {activeTile ? (
+          <div className="mt-4 border border-line bg-white/70 p-4 md:hidden">
+            <TileDetails tile={activeTile} />
+          </div>
+        ) : null}
+
+        {activeTile ? (
+          <div className="mt-4 hidden border border-line bg-white/70 p-4 md:block">
+            <TileDetails tile={activeTile} />
+          </div>
+        ) : null}
       </section>
 
       <section className="mt-10 grid gap-6 lg:grid-cols-2 anim-rise-delay-3">
@@ -115,7 +180,11 @@ export default function DashboardClient() {
                 <li
                   key={r.id}
                   className={`border border-line bg-white/50 px-4 py-3 ${
-                    r.daysLeft <= 5 ? "highlight-renewal" : ""
+                    r.recurring
+                      ? "highlight-recurring"
+                      : r.daysLeft <= 5
+                        ? "highlight-renewal"
+                        : ""
                   }`}
                 >
                   <div className="flex items-center justify-between gap-3">
@@ -124,6 +193,7 @@ export default function DashboardClient() {
                       <p className="font-mono text-xs text-ink-soft">
                         due {r.due}
                         {r.daysLeft <= 5 ? ` · ${r.daysLeft}d left` : ""}
+                        {r.recurring ? " · recurring" : ""}
                       </p>
                       {r.remarks ? (
                         <p className="mt-1 text-sm text-ink-soft">{r.remarks}</p>
@@ -143,41 +213,71 @@ export default function DashboardClient() {
             <p className="text-sm text-ink-soft">No expenses yet — add one from Expenses.</p>
           ) : (
             <ul className="space-y-2">
-              {data.recent.map((e) => {
-                const hot =
-                  e.renewalDate &&
-                  data.renewals.some((r) => r.id === e.id && r.daysLeft <= 5);
-                return (
-                  <li
-                    key={e.id}
-                    className={`border border-line bg-white/50 px-4 py-3 ${
-                      hot ? "highlight-renewal" : ""
-                    }`}
-                  >
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <p className="font-medium text-ink">
-                          {e.label}{" "}
-                          <span className="font-mono text-xs font-normal text-ink-soft">
-                            {e.date}
-                          </span>
-                        </p>
-                        {e.remarks ? (
-                          <p className="mt-1 text-sm text-ink-soft">{e.remarks}</p>
-                        ) : null}
-                      </div>
-                      <p className="shrink-0 font-mono text-sm font-medium">
-                        {formatINR(e.amount)}
+              {data.recent.map((e) => (
+                <li
+                  key={e.id}
+                  className={`border border-line bg-white/50 px-4 py-3 ${
+                    e.recurring
+                      ? "highlight-recurring"
+                      : e.renewalDate
+                        ? "highlight-renewal"
+                        : ""
+                  }`}
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="font-medium text-ink">
+                        {e.label}{" "}
+                        <span className="font-mono text-xs font-normal text-ink-soft">
+                          {e.date}
+                        </span>
                       </p>
+                      {e.remarks ? (
+                        <p className="mt-1 text-sm text-ink-soft">{e.remarks}</p>
+                      ) : null}
                     </div>
-                  </li>
-                );
-              })}
+                    <p className="shrink-0 font-mono text-sm font-medium">
+                      {formatINR(e.amount)}
+                    </p>
+                  </div>
+                </li>
+              ))}
             </ul>
           )}
         </div>
       </section>
     </AppShell>
+  );
+}
+
+function TileDetails({ tile }: { tile: Tile }) {
+  return (
+    <div>
+      <p className="font-semibold text-ink">{tile.label}</p>
+      <p className="mt-1 font-mono text-xs text-ink-soft">
+        {tile.items.length} entr{tile.items.length === 1 ? "y" : "ies"} · {formatINR(tile.amount)}{" "}
+        · {tile.share}%
+      </p>
+      <ul className="mt-3 max-h-48 space-y-2 overflow-y-auto">
+        {tile.items.map((item) => (
+          <li
+            key={item.id}
+            className="flex items-start justify-between gap-3 border-b border-line/50 pb-2 text-sm last:border-0"
+          >
+            <div>
+              <p className="font-mono text-xs text-ink-soft">{item.date}</p>
+              <p className="text-ink">
+                {item.remarks?.trim() ? item.remarks : tile.label}
+                {item.recurring ? (
+                  <span className="ml-2 font-mono text-[10px] text-[#c45f12]">recurring</span>
+                ) : null}
+              </p>
+            </div>
+            <p className="shrink-0 font-mono font-medium">{formatINR(item.amount)}</p>
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }
 
