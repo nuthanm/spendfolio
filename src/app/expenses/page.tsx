@@ -50,7 +50,34 @@ export default function ExpensesPage() {
   const [savedFlash, setSavedFlash] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
+  const [query, setQuery] = useState("");
   const month = useMemo(() => currentMonthKey(), []);
+
+  const filteredRows = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return rows;
+
+    const digits = q.replace(/[^\d.]/g, "");
+
+    return rows.filter((e) => {
+      const haystack = [
+        e.label,
+        e.remarks,
+        e.date,
+        e.renewalDate,
+        e.recurring ? "recurring" : "",
+        formatINR(e.amount),
+        String(e.amount),
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+
+      if (haystack.includes(q)) return true;
+      if (digits && String(e.amount).includes(digits)) return true;
+      return false;
+    });
+  }, [rows, query]);
 
   function refresh() {
     startTransition(async () => {
@@ -387,9 +414,20 @@ export default function ExpensesPage() {
         </div>
 
         <div className="anim-rise-delay-1">
-          <h2 className="mb-4 text-lg font-bold text-ink">This month&apos;s entries</h2>
+          <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
+            <h2 className="text-lg font-bold text-ink">This month&apos;s entries</h2>
+            <label className="relative block w-full max-w-xs">
+              <span className="sr-only">Search entries</span>
+              <input
+                className="field py-2 text-sm"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Search amount, text, or date"
+              />
+            </label>
+          </div>
           <ul className="max-h-[640px] space-y-2 overflow-y-auto pr-1">
-            {rows.map((e) => (
+            {filteredRows.map((e) => (
               <li
                 key={e.id}
                 className={`border border-line bg-white/50 px-4 py-3 ${
@@ -447,6 +485,8 @@ export default function ExpensesPage() {
             ))}
             {rows.length === 0 ? (
               <li className="text-sm text-ink-soft">No expenses this month yet.</li>
+            ) : filteredRows.length === 0 ? (
+              <li className="text-sm text-ink-soft">No entries match {query.trim()}.</li>
             ) : null}
           </ul>
         </div>
