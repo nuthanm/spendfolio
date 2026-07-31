@@ -1,0 +1,2 @@
+# spendfolio
+Track your expenses
