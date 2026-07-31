@@ -48,7 +48,8 @@ export default function ExpensesPage() {
             className="border border-line bg-white/50 p-5"
             onSubmit={(e) => {
               e.preventDefault();
-              const fd = new FormData(e.currentTarget);
+              const form = e.currentTarget;
+              const fd = new FormData(form);
               fd.set("customFields", JSON.stringify(customValues));
               startTransition(async () => {
                 const res = await addExpense(fd);
@@ -57,7 +58,7 @@ export default function ExpensesPage() {
                   setError(null);
                   setSavedFlash(true);
                   setTimeout(() => setSavedFlash(false), 1600);
-                  e.currentTarget.reset();
+                  form.reset();
                   setCustomValues({});
                   refresh();
                 }
@@ -194,10 +195,11 @@ export default function ExpensesPage() {
             className="mt-4 border border-dashed border-mint/50 bg-mint/5 p-4"
             onSubmit={(e) => {
               e.preventDefault();
-              const fd = new FormData(e.currentTarget);
+              const form = e.currentTarget;
+              const fd = new FormData(form);
               startTransition(async () => {
                 await addFieldDef(fd);
-                e.currentTarget.reset();
+                form.reset();
                 refresh();
               });
             }}

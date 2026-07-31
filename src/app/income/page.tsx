@@ -75,13 +75,14 @@ export default function IncomePage() {
           className="border border-line bg-white/50 p-5 anim-rise-delay-2"
           onSubmit={(e) => {
             e.preventDefault();
-            const fd = new FormData(e.currentTarget);
+            const form = e.currentTarget;
+            const fd = new FormData(form);
             startTransition(async () => {
               const res = await addIncomeSource(fd);
               if (res?.error) setError(res.error);
               else {
                 setError(null);
-                e.currentTarget.reset();
+                form.reset();
                 refresh();
               }
             });
