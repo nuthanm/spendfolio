@@ -16,13 +16,15 @@ export default function DashboardClient() {
   const initialMonth = search.get("month") || undefined;
   const [data, setData] = useState<Dash | null>(null);
   const [pending, startTransition] = useTransition();
-  const [activeTile, setActiveTile] = useState<Tile | null>(null);
+  const [hoveredLabel, setHoveredLabel] = useState<string | null>(null);
+  const [selectedLabel, setSelectedLabel] = useState<string | null>(null);
 
   useEffect(() => {
     startTransition(async () => {
       const d = await getDashboardData(initialMonth);
       setData(d);
-      setActiveTile(null);
+      setHoveredLabel(null);
+      setSelectedLabel(null);
     });
   }, [initialMonth]);
 
@@ -110,53 +112,60 @@ export default function DashboardClient() {
         <div className="mb-4 flex items-end justify-between gap-4">
           <h2 className="text-xl font-bold text-ink">Where money went</h2>
           <p className="font-mono text-xs text-ink-soft">
-            hover or click a tile · {data.monthLabel}
+            hover or tap a tile · {data.monthLabel}
           </p>
         </div>
         {data.tiles.length === 0 ? (
           <p className="text-sm text-ink-soft">No expenses recorded for this month yet.</p>
         ) : (
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            {data.tiles.map((tile) => (
-              <button
-                key={tile.label}
-                type="button"
-                className={`tile-spend relative z-0 p-4 text-left hover:z-10 ${
-                  activeTile?.label === tile.label ? "z-10 border-mint" : ""
-                }`}
-                onClick={() =>
-                  setActiveTile((current) =>
-                    current?.label === tile.label ? null : tile,
-                  )
-                }
-                onMouseEnter={() => setActiveTile(tile)}
-              >
-                <div className="flex items-start justify-between gap-2">
-                  <p className="font-medium text-ink">{tile.label}</p>
-                  <span className="font-mono text-[11px] text-ink-soft">{tile.share}%</span>
-                </div>
-                <p className="mt-3 text-2xl font-bold number-tick text-ink">
-                  {formatINR(tile.amount)}
-                </p>
-                <div className="mt-3 h-1.5 w-full bg-paper-deep">
-                  <div
-                    className="h-full bg-mint"
-                    style={{ width: `${Math.min(100, tile.share * 2.8)}%` }}
-                  />
-                </div>
-                <p className="mt-2 font-mono text-[10px] text-ink-soft">
-                  {tile.items.length} entr{tile.items.length === 1 ? "y" : "ies"}
-                </p>
-              </button>
-            ))}
+            {data.tiles.map((tile) => {
+              const isSelected = selectedLabel === tile.label;
+              const showPopover =
+                hoveredLabel === tile.label ||
+                (hoveredLabel === null && isSelected);
+              return (
+                <button
+                  key={tile.label}
+                  type="button"
+                  className={`tile-spend relative z-0 p-4 text-left ${
+                    showPopover ? "z-40" : ""
+                  } ${isSelected ? "border-mint" : ""}`}
+                  onClick={() =>
+                    setSelectedLabel((current) =>
+                      current === tile.label ? null : tile.label,
+                    )
+                  }
+                  onMouseEnter={() => setHoveredLabel(tile.label)}
+                  onMouseLeave={() => setHoveredLabel(null)}
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <p className="font-medium text-ink">{tile.label}</p>
+                    <span className="font-mono text-[11px] text-ink-soft">{tile.share}%</span>
+                  </div>
+                  <p className="mt-3 text-2xl font-bold number-tick text-ink">
+                    {formatINR(tile.amount)}
+                  </p>
+                  <div className="mt-3 h-1.5 w-full bg-paper-deep">
+                    <div
+                      className="h-full bg-mint"
+                      style={{ width: `${Math.min(100, tile.share * 2.8)}%` }}
+                    />
+                  </div>
+                  <p className="mt-2 font-mono text-[10px] text-ink-soft">
+                    {tile.items.length} entr{tile.items.length === 1 ? "y" : "ies"}
+                  </p>
+
+                  {showPopover ? (
+                    <div className="pointer-events-none absolute bottom-full left-1/2 z-50 mb-2 w-[min(18rem,calc(100vw-2rem))] -translate-x-1/2 rounded-xl bg-[#14241e] p-4 text-left text-white shadow-[0_18px_40px_rgba(20,36,30,0.35)]">
+                      <TilePopover tile={tile} />
+                    </div>
+                  ) : null}
+                </button>
+              );
+            })}
           </div>
         )}
-
-        {activeTile ? (
-          <div className="mt-4 border border-line bg-white/70 p-4">
-            <TileDetails tile={activeTile} />
-          </div>
-        ) : null}
       </section>
 
       <section className="mt-10 grid gap-6 lg:grid-cols-2 anim-rise-delay-3">
@@ -240,30 +249,37 @@ export default function DashboardClient() {
   );
 }
 
-function TileDetails({ tile }: { tile: Tile }) {
+function TilePopover({ tile }: { tile: Tile }) {
   return (
     <div>
-      <p className="font-semibold text-ink">{tile.label}</p>
-      <p className="mt-1 font-mono text-xs text-ink-soft">
-        {tile.items.length} entr{tile.items.length === 1 ? "y" : "ies"} · {formatINR(tile.amount)}{" "}
-        · {tile.share}%
-      </p>
-      <ul className="mt-3 max-h-48 space-y-2 overflow-y-auto">
+      <p className="text-sm font-bold text-white">{tile.label}</p>
+      <dl className="mt-3 space-y-1.5 font-mono text-[11px]">
+        <div className="flex items-center justify-between gap-4">
+          <dt className="text-white/55">Share of spend</dt>
+          <dd className="font-medium text-white">{tile.share}%</dd>
+        </div>
+        <div className="flex items-center justify-between gap-4">
+          <dt className="text-white/55">Total</dt>
+          <dd className="font-medium text-white">{formatINR(tile.amount)}</dd>
+        </div>
+        <div className="flex items-center justify-between gap-4">
+          <dt className="text-white/55">Entries</dt>
+          <dd className="font-medium text-white">{tile.items.length}</dd>
+        </div>
+      </dl>
+      <ul className="mt-3 max-h-40 space-y-2 overflow-y-auto border-t border-white/10 pt-3">
         {tile.items.map((item) => (
-          <li
-            key={item.id}
-            className="flex items-start justify-between gap-3 border-b border-line/50 pb-2 text-sm last:border-0"
-          >
-            <div>
-              <p className="font-mono text-xs text-ink-soft">{item.date}</p>
-              <p className="text-ink">
+          <li key={item.id} className="flex items-start justify-between gap-3 text-xs">
+            <div className="min-w-0">
+              <p className="font-mono text-[10px] text-white/45">{item.date}</p>
+              <p className="truncate text-white/90">
                 {item.remarks?.trim() ? item.remarks : tile.label}
                 {item.recurring ? (
-                  <span className="ml-2 font-mono text-[10px] text-[#c45f12]">recurring</span>
+                  <span className="ml-1.5 font-mono text-[9px] text-[#f0a35a]">recurring</span>
                 ) : null}
               </p>
             </div>
-            <p className="shrink-0 font-mono font-medium">{formatINR(item.amount)}</p>
+            <p className="shrink-0 font-mono font-medium text-white">{formatINR(item.amount)}</p>
           </li>
         ))}
       </ul>
