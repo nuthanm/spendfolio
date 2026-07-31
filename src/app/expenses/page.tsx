@@ -20,6 +20,7 @@ type FieldDef = Awaited<ReturnType<typeof listFieldDefs>>[number];
 type FormState = {
   date: string;
   label: string;
+  customLabel: string;
   amount: string;
   remarks: string;
   recurring: boolean;
@@ -29,11 +30,16 @@ type FormState = {
 const emptyForm = (): FormState => ({
   date: new Date().toISOString().slice(0, 10),
   label: "Lunch",
+  customLabel: "",
   amount: "",
   remarks: "",
   recurring: false,
   renewalDate: "",
 });
+
+function isPresetLabel(label: string) {
+  return (DEFAULT_EXPENSE_LABELS as readonly string[]).includes(label);
+}
 
 export default function ExpensesPage() {
   const [rows, setRows] = useState<Expense[]>([]);
@@ -59,10 +65,12 @@ export default function ExpensesPage() {
   }, []);
 
   function startEdit(expense: Expense) {
+    const preset = isPresetLabel(expense.label);
     setEditingId(expense.id);
     setForm({
       date: expense.date,
-      label: expense.label,
+      label: preset ? expense.label : "Other",
+      customLabel: preset ? "" : expense.label,
       amount: String(expense.amount),
       remarks: expense.remarks || "",
       recurring: expense.recurring,
@@ -85,9 +93,16 @@ export default function ExpensesPage() {
 
   function onSubmit(e: React.FormEvent) {
     e.preventDefault();
+    const resolvedLabel =
+      form.label === "Other" ? form.customLabel.trim() : form.label.trim();
+    if (form.label === "Other" && !resolvedLabel) {
+      setError("Enter a name for Other.");
+      return;
+    }
+
     const fd = new FormData();
     fd.set("date", form.date);
-    fd.set("label", form.label);
+    fd.set("label", resolvedLabel);
     fd.set("amount", form.amount);
     fd.set("remarks", form.remarks);
     fd.set("recurring", form.recurring ? "true" : "false");
@@ -156,16 +171,35 @@ export default function ExpensesPage() {
                 <select
                   className="field"
                   value={form.label}
-                  onChange={(e) => setForm((f) => ({ ...f, label: e.target.value }))}
+                  onChange={(e) =>
+                    setForm((f) => ({
+                      ...f,
+                      label: e.target.value,
+                      customLabel: e.target.value === "Other" ? f.customLabel : "",
+                    }))
+                  }
                 >
                   {DEFAULT_EXPENSE_LABELS.map((l) => (
                     <option key={l}>{l}</option>
                   ))}
-                  {!(DEFAULT_EXPENSE_LABELS as readonly string[]).includes(form.label) ? (
-                    <option>{form.label}</option>
-                  ) : null}
                 </select>
               </label>
+              {form.label === "Other" ? (
+                <label className="block">
+                  <span className="mb-1.5 block font-mono text-[11px] uppercase tracking-wider text-ink-soft">
+                    Defined name
+                  </span>
+                  <input
+                    className="field"
+                    required
+                    placeholder="e.g. Domain for 1 year"
+                    value={form.customLabel}
+                    onChange={(e) =>
+                      setForm((f) => ({ ...f, customLabel: e.target.value }))
+                    }
+                  />
+                </label>
+              ) : null}
               <label className="block">
                 <span className="mb-1.5 block font-mono text-[11px] uppercase tracking-wider text-ink-soft">
                   Amount (₹)
