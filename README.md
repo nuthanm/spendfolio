@@ -10,6 +10,7 @@
 [![GitHub stars](https://img.shields.io/github/stars/nuthanm/spendfolio?style=social)](https://github.com/nuthanm/spendfolio/stargazers)
 
 Private monthly expense tracker with income sources, customizable expenses, renewals, import preview, and authenticator 2FA.
+<img width="1906" height="983" alt="image" src="https://github.com/user-attachments/assets/be435622-4161-48c5-ab5d-0f0aa84fdd93" />
 
 ## Stack
 
