@@ -57,6 +57,14 @@ export default function IncomePage() {
   const [form, setForm] = useState<FormState>(emptyForm);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [pending, startTransition] = useTransition();
+  const [selectedMonthKey, setSelectedMonthKey] = useState<string>(currentMonthKey());
+  const [monthDrafts, setMonthDrafts] = useState<Record<string, string>>({});
+  const [monthError, setMonthError] = useState<string | null>(null);
+  const months = useMemo(() => monthOptions(), []);
+  const recurringSources = useMemo(
+    () => sources.filter((source) => source.recurring),
+    [sources],
   );
   const selectedMonthLabel = useMemo(() => formatMonthLabel(selectedMonthKey), [selectedMonthKey]);
   const selectedMonthOverrides = useMemo(
@@ -218,13 +226,7 @@ export default function IncomePage() {
               {selectedMonthLabel} · Recurring {formatINR(selectedMonthRecurringTotal)} · One-time {formatINR(selectedMonthOneTimeTotal)}
             </p>
           </div>
-                {selectedMonthLabel} · Recurring {formatINR(selectedMonthRecurringTotal)} · One-time {formatINR(selectedMonthOneTimeTotal)}
           <label className="block min-w-52">
-        {selectedMonthTotal === 0 ? (
-          <p className="mt-2 text-sm text-coral">
-            This month has no income recorded yet, so the total is 0 until you add or override a value.
-          </p>
-        ) : null}
             <span className="mb-1 block font-mono text-[11px] uppercase tracking-wider text-ink-soft">
               Month
             </span>

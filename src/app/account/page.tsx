@@ -9,6 +9,9 @@ import {
 } from "@/lib/actions/auth";
 import { exportAllData } from "@/lib/actions/dashboard";
 import { getSessionUser } from "@/lib/actions/session";
+import { getEnabledModules, setModuleEnabled } from "@/lib/actions/modules";
+import type { WealthModule } from "@/lib/modules";
+import { WEALTH_MODULES, MODULE_ROUTES } from "@/lib/modules";
 
 export default function AccountPage() {
   const [twoFA, setTwoFA] = useState(true);
@@ -19,6 +22,7 @@ export default function AccountPage() {
   const [message, setMessage] = useState<string | null>(null);
   const [qr, setQr] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
+  const [enabledModules, setEnabledModulesState] = useState<WealthModule[]>([]);
 
   useEffect(() => {
     getSessionUser().then((u) => {
@@ -27,6 +31,7 @@ export default function AccountPage() {
         setTwoFA(u.totpEnabled);
       }
     });
+    getEnabledModules().then(setEnabledModulesState);
   }, []);
 
   function downloadExport(format: "json" | "csv") {
@@ -63,6 +68,42 @@ export default function AccountPage() {
 
       <div className="grid gap-6 lg:grid-cols-2">
         <section className="border border-line bg-white/50 p-5 anim-rise">
+          <h2 className="text-lg font-bold text-ink">Wealth modules</h2>
+          <p className="mt-2 text-sm text-ink-soft">
+            Enable Gold, Silver, or House tracking to get started.
+          </p>
+          <div className="mt-4 space-y-2">
+            {WEALTH_MODULES.map((module) => (
+              <label key={module} className="flex items-center gap-3 rounded border border-line/60 bg-white/40 p-3 cursor-pointer hover:bg-white/50">
+                <input
+                  type="checkbox"
+                  checked={enabledModules.includes(module)}
+                  onChange={(e) =>
+                    startTransition(async () => {
+                      const res = await setModuleEnabled(module, e.target.checked);
+                      if ("enabled" in res) {
+                        setEnabledModulesState(res.enabled);
+                        setMessage(`${MODULE_ROUTES[module].label} ${e.target.checked ? "enabled" : "disabled"}.`);
+                      }
+                    })
+                  }
+                  className="h-4 w-4 rounded border-line/60 cursor-pointer"
+                  disabled={pending}
+                />
+                <div>
+                  <p className="font-medium text-ink">{MODULE_ROUTES[module].label}</p>
+                  <p className="text-xs text-ink-soft">
+                    {module === "gold" && "Track gold accumulation, goals, and profit/loss on sales"}
+                    {module === "silver" && "Track silver accumulation, goals, and profit/loss on sales"}
+                    {module === "house" && "Track house down payment and expenses"}
+                  </p>
+                </div>
+              </label>
+            ))}
+          </div>
+        </section>
+
+        <section className="border border-line bg-white/50 p-5 anim-rise-delay-1">
           <h2 className="text-lg font-bold text-ink">Export data</h2>
           <p className="mt-2 text-sm text-ink-soft">
             Download income, expenses, and custom fields — for your backup, not a shared suite.
@@ -87,7 +128,7 @@ export default function AccountPage() {
           </div>
         </section>
 
-        <section className="border border-line bg-white/50 p-5 anim-rise-delay-1">
+        <section className="border border-line bg-white/50 p-5 anim-rise-delay-2">
           <h2 className="text-lg font-bold text-ink">Two-factor authentication</h2>
           <p className="mt-2 text-sm text-ink-soft">
             Authenticator app required on every login when enabled.
@@ -155,7 +196,9 @@ export default function AccountPage() {
           ) : null}
         </section>
 
-        <section className="border border-line bg-white/50 p-5 anim-rise-delay-2">
+        </section>
+
+        <section className="border border-line bg-white/50 p-5 anim-rise-delay-3">
           <h2 className="text-lg font-bold text-ink">Change password</h2>
           <p className="mt-2 text-sm text-ink-soft">
             Password changes always ask for a fresh 2FA code when 2FA is on.
@@ -204,7 +247,7 @@ export default function AccountPage() {
           )}
         </section>
 
-        <section className="border border-coral/30 bg-coral/5 p-5 anim-rise-delay-3">
+        <section className="border border-coral/30 bg-coral/5 p-5 anim-rise-delay-4">
           <h2 className="text-lg font-bold text-ink">Delete account</h2>
           <p className="mt-2 text-sm text-ink-soft">
             Permanently removes your ledger. Export first if you need a copy.
