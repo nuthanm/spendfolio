@@ -81,9 +81,11 @@ export default function AccountPage() {
                   onChange={(e) =>
                     startTransition(async () => {
                       const res = await setModuleEnabled(module, e.target.checked);
-                      if ("enabled" in res) {
+                      if (res.ok) {
                         setEnabledModulesState(res.enabled);
                         setMessage(`${MODULE_ROUTES[module].label} ${e.target.checked ? "enabled" : "disabled"}.`);
+                      } else {
+                        setMessage(res.error);
                       }
                     })
                   }

@@ -10,6 +10,10 @@ import {
   WEALTH_MODULES,
 } from "@/lib/modules";
 
+type SetModuleEnabledResult =
+  | { ok: true; enabled: WealthModule[] }
+  | { ok: false; error: string };
+
 export async function getEnabledModules(): Promise<WealthModule[]> {
   const user = await requireUser();
   const rows = await prisma.$queryRaw<{ enabledModules: string }[]>`
@@ -21,10 +25,13 @@ export async function getEnabledModules(): Promise<WealthModule[]> {
   return parseEnabledModules(rows[0]?.enabledModules ?? "[]");
 }
 
-export async function setModuleEnabled(module: WealthModule, enabled: boolean) {
+export async function setModuleEnabled(
+  module: WealthModule,
+  enabled: boolean,
+): Promise<SetModuleEnabledResult> {
   const user = await requireUser();
   if (!WEALTH_MODULES.includes(module)) {
-    return { error: "Invalid module." };
+    return { ok: false, error: "Invalid module." };
   }
 
   const current = await getEnabledModules();
@@ -42,7 +49,7 @@ export async function setModuleEnabled(module: WealthModule, enabled: boolean) {
   for (const m of WEALTH_MODULES) {
     revalidatePath(MODULE_ROUTES[m].href);
   }
-  return { ok: true as const, enabled: next };
+  return { ok: true, enabled: next };
 }
 
 export async function getNavItems() {
