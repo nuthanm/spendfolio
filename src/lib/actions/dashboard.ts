@@ -73,8 +73,8 @@ export async function getDashboardData(monthKey?: string, fyStartYear?: string) 
   function getMonthlyIncomeTotal(targetMonthKey: string) {
     const recurringTotal = recurringIncomes.reduce((sum, income) => {
       const startMonth = recurringStartBySource.get(income.id);
-      if (startMonth && targetMonthKey < startMonth) return sum;
       const override = overrideMap.get(`${income.id}|${targetMonthKey}`);
+      if (!override && startMonth && targetMonthKey < startMonth) return sum;
       return sum + (override ?? income.amount);
     }, 0);
 

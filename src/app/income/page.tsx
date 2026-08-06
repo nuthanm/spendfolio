@@ -26,12 +26,6 @@ type FormState = {
   monthKey: string;
 };
 
-type OverrideFormState = {
-  sourceId: string;
-  monthKey: string;
-  amount: string;
-};
-
 const emptyForm = (): FormState => ({
   name: "",
   amount: "",
@@ -41,16 +35,10 @@ const emptyForm = (): FormState => ({
   monthKey: currentMonthKey(),
 });
 
-const emptyOverrideForm = (): OverrideFormState => ({
-  sourceId: "",
-  monthKey: currentMonthKey(),
-  amount: "",
-});
-
 function monthOptions() {
   const now = new Date();
   const options: { key: string; label: string }[] = [];
-  for (let i = -18; i <= 6; i++) {
+  for (let i = -24; i <= 12; i++) {
     const d = new Date(now.getFullYear(), now.getMonth() + i, 1);
     const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
     options.push({ key, label: formatMonthLabel(key) });
@@ -58,20 +46,44 @@ function monthOptions() {
   return options.reverse();
 }
 
+function monthKeyFromValue(value: string | Date | null | undefined) {
+  if (!value) return null;
+  return currentMonthKey(new Date(value));
+}
+
 export default function IncomePage() {
   const [sources, setSources] = useState<Source[]>([]);
   const [overrides, setOverrides] = useState<Override[]>([]);
   const [form, setForm] = useState<FormState>(emptyForm);
-  const [overrideForm, setOverrideForm] = useState<OverrideFormState>(emptyOverrideForm);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [overrideError, setOverrideError] = useState<string | null>(null);
-  const [pending, startTransition] = useTransition();
-  const months = useMemo(() => monthOptions(), []);
-  const recurringSources = useMemo(
-    () => sources.filter((source) => source.recurring),
-    [sources],
   );
+  const selectedMonthLabel = useMemo(() => formatMonthLabel(selectedMonthKey), [selectedMonthKey]);
+  const selectedMonthOverrides = useMemo(
+    () =>
+      new Map(
+        overrides
+          .filter((override) => override.monthKey === selectedMonthKey)
+          .map((override) => [override.sourceId, override]),
+      ),
+    [overrides, selectedMonthKey],
+  );
+  const selectedMonthRecurringTotal = useMemo(() => {
+    return recurringSources.reduce((sum, source) => {
+      const override = selectedMonthOverrides.get(source.id);
+      const sourceStartMonth = monthKeyFromValue(source.createdAt);
+      if (!override && sourceStartMonth && selectedMonthKey < sourceStartMonth) return sum;
+      return sum + (override?.amount ?? source.amount);
+    }, 0);
+  }, [recurringSources, selectedMonthOverrides, selectedMonthKey]);
+  const selectedMonthOneTimeTotal = useMemo(
+    () =>
+      sources
+        .filter((source) => !source.recurring && source.monthKey === selectedMonthKey)
+        .reduce((sum, source) => sum + source.amount, 0),
+    [sources, selectedMonthKey],
+  );
+  const selectedMonthTotal = selectedMonthRecurringTotal + selectedMonthOneTimeTotal;
 
   function refresh() {
     startTransition(async () => {
@@ -81,23 +93,12 @@ export default function IncomePage() {
       ]);
       setSources(nextSources);
       setOverrides(nextOverrides);
-      setOverrideForm((current) => {
-        if (current.sourceId) return current;
-        return {
-          ...current,
-          sourceId: nextSources.find((source) => source.recurring)?.id || "",
-        };
-      });
     });
   }
 
   useEffect(() => {
     refresh();
   }, []);
-
-  const recurringTotal = sources
-    .filter((s) => s.recurring)
-    .reduce((sum, s) => sum + s.amount, 0);
 
   function startEdit(source: Source) {
     setEditingId(source.id);
@@ -116,6 +117,63 @@ export default function IncomePage() {
     setEditingId(null);
     setForm(emptyForm());
     setError(null);
+  }
+
+  function monthDraftKey(sourceId: string) {
+    return `${sourceId}|${selectedMonthKey}`;
+  }
+
+  function getMonthValueForSource(source: Source) {
+    const draft = monthDrafts[monthDraftKey(source.id)];
+    if (draft !== undefined) return draft;
+
+    const override = selectedMonthOverrides.get(source.id);
+    if (override) return String(override.amount);
+
+    const sourceStartMonth = monthKeyFromValue(source.createdAt);
+    if (sourceStartMonth && selectedMonthKey < sourceStartMonth) return "0";
+
+    return String(source.amount);
+  }
+
+  function commitMonthValue(source: Source) {
+    const rawAmount = getMonthValueForSource(source).trim();
+    if (!rawAmount) {
+      setMonthError("Enter an amount for the selected month.");
+      return;
+    }
+
+    const amount = Number(rawAmount);
+    if (!(amount >= 0)) {
+      setMonthError("Amount must be zero or more.");
+      return;
+    }
+
+    const fd = new FormData();
+    fd.set("sourceId", source.id);
+    fd.set("monthKey", selectedMonthKey);
+    fd.set("amount", String(amount));
+
+    startTransition(async () => {
+      const res = await upsertIncomeOverride(fd);
+      if (res?.error) {
+        setMonthError(res.error);
+        return;
+      }
+      setMonthError(null);
+      refresh();
+    });
+  }
+
+  function removeMonthValue(source: Source) {
+    const override = selectedMonthOverrides.get(source.id);
+    if (!override) return;
+
+    startTransition(async () => {
+      await deleteIncomeOverride(override.id);
+      setMonthError(null);
+      refresh();
+    });
   }
 
   function onSubmit(e: React.FormEvent<HTMLFormElement>) {
@@ -142,158 +200,57 @@ export default function IncomePage() {
     });
   }
 
-  function onSubmitOverride(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    const fd = new FormData();
-    fd.set("sourceId", overrideForm.sourceId);
-    fd.set("monthKey", overrideForm.monthKey);
-    fd.set("amount", overrideForm.amount);
-
-    startTransition(async () => {
-      const res = await upsertIncomeOverride(fd);
-      if (res?.error) {
-        setOverrideError(res.error);
-        return;
-      }
-      setOverrideError(null);
-      setOverrideForm((current) => ({ ...current, amount: "" }));
-      refresh();
-    });
-  }
-
   return (
     <AppShell
       title="Sources of income"
       subtitle="Recurring sources count every month. One-time income is tied to a specific month."
     >
       <div className="mb-6 border border-line bg-white/50 p-5 anim-rise">
-        <p className="font-mono text-[11px] uppercase tracking-wider text-ink-soft">
-          Recurring monthly inflow
-        </p>
-        <p className="mt-2 text-3xl font-bold text-mint number-tick">
-          {formatINR(recurringTotal)}
-        </p>
-        <p className="mt-2 text-sm text-ink-soft">
-          One-time entries only appear on their selected month in the dashboard.
-        </p>
-      </div>
-
-      <section className="mb-8 border border-line bg-white/50 p-5 anim-rise-delay-1">
-        <h2 className="text-lg font-bold text-ink">Month-wise recurring adjustments</h2>
-        <p className="mt-1 text-sm text-ink-soft">
-          Override a recurring source amount for a specific month without changing other months.
-        </p>
-
-        {recurringSources.length === 0 ? (
-          <p className="mt-4 text-sm text-ink-soft">Add a recurring source first to set month-wise income.</p>
-        ) : (
-          <form className="mt-4 grid gap-3 md:grid-cols-[1.2fr_1fr_1fr_auto]" onSubmit={onSubmitOverride}>
-            <label className="block">
-              <span className="mb-1 block font-mono text-[11px] uppercase tracking-wider text-ink-soft">
-                Source
-              </span>
-              <select
-                className="field"
-                required
-                value={overrideForm.sourceId}
-                onChange={(e) =>
-                  setOverrideForm((state) => ({ ...state, sourceId: e.target.value }))
-                }
-              >
-                <option value="" disabled>
-                  Select source
+        <div className="flex flex-wrap items-end justify-between gap-4">
+          <div>
+            <p className="font-mono text-[11px] uppercase tracking-wider text-ink-soft">
+              Month view
+            </p>
+            <p className="mt-2 text-3xl font-bold text-mint number-tick">
+              {formatINR(selectedMonthTotal)}
+            </p>
+            <p className="mt-2 text-sm text-ink-soft">
+              {selectedMonthLabel} · Recurring {formatINR(selectedMonthRecurringTotal)} · One-time {formatINR(selectedMonthOneTimeTotal)}
+            </p>
+          </div>
+                {selectedMonthLabel} · Recurring {formatINR(selectedMonthRecurringTotal)} · One-time {formatINR(selectedMonthOneTimeTotal)}
+          <label className="block min-w-52">
+        {selectedMonthTotal === 0 ? (
+          <p className="mt-2 text-sm text-coral">
+            This month has no income recorded yet, so the total is 0 until you add or override a value.
+          </p>
+        ) : null}
+            <span className="mb-1 block font-mono text-[11px] uppercase tracking-wider text-ink-soft">
+              Month
+            </span>
+            <select
+              className="field"
+              value={selectedMonthKey}
+              onChange={(e) => setSelectedMonthKey(e.target.value)}
+            >
+              {months.map((month) => (
+                <option key={month.key} value={month.key}>
+                  {month.label}
                 </option>
-                {recurringSources.map((source) => (
-                  <option key={source.id} value={source.id}>
-                    {source.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-
-            <label className="block">
-              <span className="mb-1 block font-mono text-[11px] uppercase tracking-wider text-ink-soft">
-                Month
-              </span>
-              <select
-                className="field"
-                required
-                value={overrideForm.monthKey}
-                onChange={(e) =>
-                  setOverrideForm((state) => ({ ...state, monthKey: e.target.value }))
-                }
-              >
-                {months.map((month) => (
-                  <option key={month.key} value={month.key}>
-                    {month.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-
-            <label className="block">
-              <span className="mb-1 block font-mono text-[11px] uppercase tracking-wider text-ink-soft">
-                Override amount (₹)
-              </span>
-              <input
-                className="field"
-                type="number"
-                min="0"
-                step="1"
-                required
-                value={overrideForm.amount}
-                onChange={(e) =>
-                  setOverrideForm((state) => ({ ...state, amount: e.target.value }))
-                }
-              />
-            </label>
-
-            <div className="flex items-end">
-              <button
-                type="submit"
-                disabled={pending}
-                className="btn-secondary w-full px-4 py-3 text-sm font-medium disabled:opacity-60"
-              >
-                Save month value
-              </button>
-            </div>
-          </form>
-        )}
-
-        {overrideError ? <p className="mt-3 text-sm text-coral">{overrideError}</p> : null}
-
-        <ul className="mt-4 space-y-2">
-          {overrides.map((item) => (
-            <li key={item.id} className="border border-line bg-white/65 px-4 py-3">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <p className="text-sm text-ink">
-                  <span className="font-semibold">{item.sourceName}</span> · {item.monthLabel}
-                </p>
-                <div className="flex items-center gap-3">
-                  <span className="font-mono text-sm font-medium text-ink">
-                    {formatINR(item.amount)}
-                  </span>
-                  <button
-                    type="button"
-                    className="text-xs text-coral"
-                    onClick={() =>
-                      startTransition(async () => {
-                        await deleteIncomeOverride(item.id);
-                        refresh();
-                      })
-                    }
-                  >
-                    Remove
-                  </button>
-                </div>
-              </div>
-            </li>
-          ))}
-          {overrides.length === 0 ? (
-            <li className="text-sm text-ink-soft">No month-wise overrides added yet.</li>
-          ) : null}
-        </ul>
-      </section>
+              ))}
+            </select>
+          </label>
+        </div>
+        <p className="mt-3 text-sm text-ink-soft">
+          Use the selected month to review past or future values, then save or remove the month-specific amount inline on each recurring source.
+        </p>
+        {selectedMonthTotal === 0 ? (
+          <p className="mt-2 text-sm text-coral">
+            This month has no income recorded yet, so the total is 0 until you add or override a value.
+          </p>
+        ) : null}
+        {monthError ? <p className="mt-3 text-sm text-coral">{monthError}</p> : null}
+      </div>
 
       <div className="grid gap-8 lg:grid-cols-[1.2fr_0.8fr]">
         <ul className="space-y-2 anim-rise-delay-2">
@@ -340,6 +297,73 @@ export default function IncomePage() {
                   </button>
                 </div>
               </div>
+
+              {s.recurring ? (
+                <div className="mt-4 border-t border-line pt-4">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                      <p className="font-mono text-[11px] uppercase tracking-wider text-ink-soft">
+                        {selectedMonthLabel}
+                      </p>
+                      <p className="mt-1 text-sm text-ink-soft">
+                        {selectedMonthOverrides.get(s.id)
+                          ? "Saved override for this month."
+                          : monthKeyFromValue(s.createdAt) && selectedMonthKey < monthKeyFromValue(s.createdAt)!
+                            ? "This month is before the source started. Save an override to backfill it."
+                            : "Changes here only affect the selected month."}
+                      </p>
+                    </div>
+                    <p className="font-mono text-sm font-semibold text-ink">
+                      {formatINR(
+                        (() => {
+                          const override = selectedMonthOverrides.get(s.id);
+                          const sourceStartMonth = monthKeyFromValue(s.createdAt);
+                          if (!override && sourceStartMonth && selectedMonthKey < sourceStartMonth) return 0;
+                          return override?.amount ?? s.amount;
+                        })(),
+                      )}
+                    </p>
+                  </div>
+
+                  <div className="mt-3 flex flex-wrap items-end gap-3">
+                    <label className="block min-w-52 flex-1">
+                      <span className="mb-1 block font-mono text-[11px] uppercase tracking-wider text-ink-soft">
+                        Month value (₹)
+                      </span>
+                      <input
+                        className="field"
+                        type="number"
+                        min="0"
+                        step="1"
+                        value={getMonthValueForSource(s)}
+                        onChange={(e) => {
+                          const key = monthDraftKey(s.id);
+                          setMonthDrafts((state) => ({ ...state, [key]: e.target.value }));
+                        }}
+                      />
+                    </label>
+
+                    <button
+                      type="button"
+                      disabled={pending}
+                      className="btn-secondary px-4 py-3 text-sm font-medium disabled:opacity-60"
+                      onClick={() => commitMonthValue(s)}
+                    >
+                      Save month value
+                    </button>
+
+                    {selectedMonthOverrides.get(s.id) ? (
+                      <button
+                        type="button"
+                        className="text-xs text-coral"
+                        onClick={() => removeMonthValue(s)}
+                      >
+                        Remove month value
+                      </button>
+                    ) : null}
+                  </div>
+                </div>
+              ) : null}
             </li>
           ))}
           {sources.length === 0 ? (
