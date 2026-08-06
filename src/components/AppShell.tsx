@@ -1,10 +1,13 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { logoutAction } from "@/lib/actions/auth";
+import { getEnabledModules } from "@/lib/actions/modules";
+import { MODULE_ROUTES, type WealthModule } from "@/lib/modules";
 
-const NAV = [
+const BASE_NAV = [
   { href: "/dashboard", label: "Dashboard" },
   { href: "/income", label: "Income" },
   { href: "/expenses", label: "Expenses" },
@@ -22,6 +25,17 @@ export function AppShell({
   subtitle?: string;
 }) {
   const pathname = usePathname();
+  const [enabledModules, setEnabledModules] = useState<WealthModule[]>([]);
+
+  useEffect(() => {
+    getEnabledModules().then(setEnabledModules).catch(() => setEnabledModules([]));
+  }, []);
+
+  const nav = [
+    ...BASE_NAV.slice(0, 3),
+    ...enabledModules.map((module) => MODULE_ROUTES[module]),
+    ...BASE_NAV.slice(3),
+  ];
 
   return (
     <div className="formula-wash min-h-screen">
@@ -34,7 +48,7 @@ export function AppShell({
             Spendfolio
           </Link>
           <nav className="app-nav hidden items-center gap-6 text-sm text-ink-soft md:flex">
-            {NAV.map((item) => (
+            {nav.map((item) => (
               <Link
                 key={item.href}
                 href={item.href}
@@ -52,7 +66,7 @@ export function AppShell({
           </form>
         </div>
         <div className="flex gap-3 overflow-x-auto border-t border-line/40 px-5 py-2 md:hidden">
-          {NAV.map((item) => (
+          {nav.map((item) => (
             <Link
               key={item.href}
               href={item.href}

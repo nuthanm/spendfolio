@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useTransition } from "react";
-import { AppShell } from "@/components/AppShell";
+import { AppShellWithModules } from "@/components/AppShellWithModules";
 import {
   changePasswordAction,
   deleteAccountAction,
@@ -58,9 +58,10 @@ export default function AccountPage() {
   }
 
   return (
-    <AppShell
+    <AppShellWithModules
       title="Account"
       subtitle="Export your data, manage 2FA, change password, or leave — your ledger stays under your control."
+      enabledModules={enabledModules}
     >
       <p className="mb-6 font-mono text-sm text-ink-soft anim-rise">
         Signed in as <span className="text-ink">{email || "…"}</span>
@@ -302,7 +303,7 @@ export default function AccountPage() {
         Logout invalidates the session token in the database. Returning always requires password +
         2FA again.
       </p>
-    </AppShell>
+    </AppShellWithModules>
   );
 }
 
