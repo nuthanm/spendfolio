@@ -122,11 +122,21 @@ export default function DashboardClient() {
       <section className="mt-10 anim-rise-delay-1">
         <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
           <h2 className="text-xl font-bold text-ink">{data.financialYear.selectedLabel} summary</h2>
-          <p className="font-mono text-xs text-ink-soft">Apr to Mar view across 12 months</p>
+          <p className="font-mono text-xs text-ink-soft">
+            Apr to Mar view across {data.financialYear.months.length} months
+          </p>
         </div>
         <div className="grid gap-4 md:grid-cols-4">
-          <Stat label="FY Income" value={data.financialYear.totals.income} note="12-month total" />
-          <Stat label="FY Expenses" value={data.financialYear.totals.expense} note="12-month total" />
+          <Stat
+            label="FY Income"
+            value={data.financialYear.totals.income}
+            note={`${data.financialYear.months.length}-month total`}
+          />
+          <Stat
+            label="FY Expenses"
+            value={data.financialYear.totals.expense}
+            note={`${data.financialYear.months.length}-month total`}
+          />
           <Stat label="FY P/L" value={data.financialYear.totals.profit} note="income − expenses" accent={data.financialYear.totals.profit >= 0} />
           <div className="border border-line bg-white/50 p-5">
             <p className="font-mono text-[11px] uppercase tracking-wider text-ink-soft">FY Trend</p>

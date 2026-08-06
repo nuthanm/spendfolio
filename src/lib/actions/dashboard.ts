@@ -22,7 +22,8 @@ function sourceIdFromOverrideCadence(cadence: string) {
 
 export async function getDashboardData(monthKey?: string, fyStartYear?: string) {
   const user = await requireUser();
-  const key = monthKey || currentMonthKey();
+  const nowMonthKey = currentMonthKey();
+  const key = monthKey || nowMonthKey;
 
   const [incomes, expenses, expenseMonthRows, recurringExpenses] = await Promise.all([
     prisma.incomeSource.findMany({ where: { userId: user.id } }),
@@ -65,8 +66,14 @@ export async function getDashboardData(monthKey?: string, fyStartYear?: string) 
 
   const overrideMap = new Map(recurringOverrides.map((item) => [`${item.sourceId}|${item.monthKey}`, item.amount]));
 
+  const recurringStartBySource = new Map(
+    recurringIncomes.map((income) => [income.id, currentMonthKey(income.createdAt)]),
+  );
+
   function getMonthlyIncomeTotal(targetMonthKey: string) {
     const recurringTotal = recurringIncomes.reduce((sum, income) => {
+      const startMonth = recurringStartBySource.get(income.id);
+      if (startMonth && targetMonthKey < startMonth) return sum;
       const override = overrideMap.get(`${income.id}|${targetMonthKey}`);
       return sum + (override ?? income.amount);
     }, 0);
@@ -158,7 +165,7 @@ export async function getDashboardData(monthKey?: string, fyStartYear?: string) 
   for (const override of recurringOverrides) {
     monthKeys.add(override.monthKey);
   }
-  monthKeys.add(currentMonthKey());
+  monthKeys.add(nowMonthKey);
   monthKeys.add(key);
 
   const financialYearOptions = [...new Set([...monthKeys].map((month) => getFinancialYearStartYear(month)))]
@@ -173,10 +180,16 @@ export async function getDashboardData(monthKey?: string, fyStartYear?: string) 
     Number.isFinite(parsedFy) &&
     financialYearOptions.some((option) => option.startYear === parsedFy)
       ? parsedFy
-      : financialYearOptions[0]?.startYear || getFinancialYearStartYear(currentMonthKey());
+      : financialYearOptions[0]?.startYear || getFinancialYearStartYear(nowMonthKey);
 
   const fyMonthKeys = buildFinancialYearMonths(selectedFyStartYear);
-  const fyMonths = fyMonthKeys.map((month) => {
+  const currentFyStartYear = getFinancialYearStartYear(nowMonthKey);
+  const visibleFyMonthKeys =
+    selectedFyStartYear === currentFyStartYear
+      ? fyMonthKeys.filter((month) => month <= nowMonthKey)
+      : fyMonthKeys;
+
+  const fyMonths = visibleFyMonthKeys.map((month) => {
     const monthIncome = getMonthlyIncomeTotal(month);
     const monthExpense = expenseTotalsByMonth.get(month) || 0;
     const profit = monthIncome - monthExpense;
@@ -194,7 +207,8 @@ export async function getDashboardData(monthKey?: string, fyStartYear?: string) 
   const fyIncomeTotal = fyMonths.reduce((sum, month) => sum + month.income, 0);
   const fyExpenseTotal = fyMonths.reduce((sum, month) => sum + month.expense, 0);
   const fyProfitTotal = fyIncomeTotal - fyExpenseTotal;
-  const fyAverageMonthlyProfit = fyProfitTotal / 12;
+  const monthCount = fyMonths.length || 1;
+  const fyAverageMonthlyProfit = fyProfitTotal / monthCount;
   const fyBestMonth = [...fyMonths].sort((a, b) => b.profit - a.profit)[0];
   const fyWorstMonth = [...fyMonths].sort((a, b) => a.profit - b.profit)[0];
 
