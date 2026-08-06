@@ -196,8 +196,6 @@ export default function AccountPage() {
           ) : null}
         </section>
 
-        </section>
-
         <section className="border border-line bg-white/50 p-5 anim-rise-delay-3">
           <h2 className="text-lg font-bold text-ink">Change password</h2>
           <p className="mt-2 text-sm text-ink-soft">
