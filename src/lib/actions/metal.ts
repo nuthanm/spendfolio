@@ -29,6 +29,10 @@ export interface MetalTransactionData {
   realizedPL: number | null;
 }
 
+type MetalActionResult =
+  | { ok: true }
+  | { error: string };
+
 // Get or create metal holding for user
 async function getOrCreateHolding(userId: string, metalType: MetalType) {
   let holding = await prisma.metalHolding.findUnique({
@@ -144,7 +148,7 @@ export async function buyMetal(
   grams: number,
   ratePerGram: number,
   note: string,
-) {
+): Promise<MetalActionResult> {
   const user = await requireUser();
 
   if (grams <= 0 || ratePerGram <= 0) {
@@ -177,7 +181,7 @@ export async function sellMetal(
   grams: number,
   ratePerGram: number,
   note: string,
-) {
+): Promise<MetalActionResult> {
   const user = await requireUser();
 
   if (grams <= 0 || ratePerGram <= 0) {
@@ -221,7 +225,7 @@ export async function setMetalGoal(
   goalGrams: number | null,
   goalDate: string | null,
   notes: string,
-) {
+): Promise<MetalActionResult> {
   const user = await requireUser();
 
   if (goalGrams !== null && goalGrams <= 0) {
@@ -244,7 +248,10 @@ export async function setMetalGoal(
   return { ok: true as const };
 }
 
-export async function updateCurrentRate(metalType: MetalType, rate: number) {
+export async function updateCurrentRate(
+  metalType: MetalType,
+  rate: number,
+): Promise<MetalActionResult> {
   const user = await requireUser();
 
   if (rate < 0) {
@@ -263,7 +270,10 @@ export async function updateCurrentRate(metalType: MetalType, rate: number) {
   return { ok: true as const };
 }
 
-export async function deleteMetalTransaction(id: string, metalType: MetalType) {
+export async function deleteMetalTransaction(
+  id: string,
+  metalType: MetalType,
+): Promise<MetalActionResult> {
   const user = await requireUser();
 
   const tx = await prisma.metalTransaction.findUnique({
