@@ -4,14 +4,14 @@ import { jwtVerify } from "jose";
 const SESSION_COOKIE = "spendfolio_session";
 const PENDING_COOKIE = "spendfolio_pending";
 
-const PROTECTED = ["/dashboard", "/income", "/expenses", "/import", "/account"];
+const PROTECTED = ["/dashboard", "/income", "/expenses", "/import", "/account", "/house"];
 
 function secretKey() {
   const secret = process.env.AUTH_SECRET || "spendfolio-dev-secret-change-me-in-production-32chars";
   return new TextEncoder().encode(secret);
 }
 
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const needsAuth = PROTECTED.some((p) => pathname === p || pathname.startsWith(p + "/"));
 
@@ -58,6 +58,7 @@ export const config = {
     "/expenses/:path*",
     "/import/:path*",
     "/account/:path*",
+    "/house/:path*",
     "/login/2fa",
   ],
 };
