@@ -234,8 +234,7 @@ export default function ExpensesPage() {
                 <input
                   className="field"
                   type="number"
-                  min="0"
-                  step="1"
+                  step="any"
                   required
                   value={form.amount}
                   onChange={(e) => setForm((f) => ({ ...f, amount: e.target.value }))}
@@ -356,6 +355,7 @@ export default function ExpensesPage() {
                               ? "date"
                               : "text"
                         }
+                        step={field.type === "number" ? "any" : undefined}
                         value={String(customValues[field.id] ?? "")}
                         onChange={(e) =>
                           setCustomValues((v) => ({ ...v, [field.id]: e.target.value }))

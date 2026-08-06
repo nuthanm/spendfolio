@@ -367,8 +367,7 @@ export function MetalPageClient({
                 <input
                   type="number"
                   name="grams"
-                  step="0.01"
-                  min="0.01"
+                  step="any"
                   placeholder="10.5"
                   required
                   className="w-full rounded border border-line/60 bg-white/40 px-3 py-2 text-sm text-ink placeholder:text-ink-soft focus:outline-none focus:ring-2 focus:ring-amber-400/50"
@@ -381,8 +380,7 @@ export function MetalPageClient({
                 <input
                   type="number"
                   name="rate"
-                  step="0.01"
-                  min="0"
+                  step="any"
                   placeholder="5000"
                   required
                   className="w-full rounded border border-line/60 bg-white/40 px-3 py-2 text-sm text-ink placeholder:text-ink-soft focus:outline-none focus:ring-2 focus:ring-amber-400/50"
@@ -432,9 +430,7 @@ export function MetalPageClient({
                 <input
                   type="number"
                   name="grams"
-                  step="0.01"
-                  min="0.01"
-                  max={holding.totalGrams}
+                  step="any"
                   placeholder="5.5"
                   required
                   className="w-full rounded border border-line/60 bg-white/40 px-3 py-2 text-sm text-ink placeholder:text-ink-soft focus:outline-none focus:ring-2 focus:ring-amber-400/50"
@@ -447,8 +443,7 @@ export function MetalPageClient({
                 <input
                   type="number"
                   name="rate"
-                  step="0.01"
-                  min="0"
+                  step="any"
                   placeholder="5200"
                   required
                   className="w-full rounded border border-line/60 bg-white/40 px-3 py-2 text-sm text-ink placeholder:text-ink-soft focus:outline-none focus:ring-2 focus:ring-amber-400/50"
@@ -491,8 +486,7 @@ export function MetalPageClient({
               <input
                 type="number"
                 name="rate"
-                step="0.01"
-                min="0"
+                step="any"
                 defaultValue={holding.currentRate || ""}
                 placeholder="5000"
                 required
@@ -527,8 +521,7 @@ export function MetalPageClient({
               <input
                 type="number"
                 name="goalGrams"
-                step="0.01"
-                min="0"
+                step="any"
                 defaultValue={holding.goalGrams || ""}
                 placeholder="100"
                 className="w-full rounded border border-line/60 bg-white/40 px-3 py-2 text-sm text-ink placeholder:text-ink-soft focus:outline-none focus:ring-2 focus:ring-amber-400/50"

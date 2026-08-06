@@ -335,8 +335,7 @@ export default function IncomePage() {
                       <input
                         className="field"
                         type="number"
-                        min="0"
-                        step="1"
+                        step="any"
                         value={getMonthValueForSource(s)}
                         onChange={(e) => {
                           const key = monthDraftKey(s.id);
@@ -413,8 +412,7 @@ export default function IncomePage() {
               <input
                 className="field"
                 type="number"
-                min="0"
-                step="1"
+                step="any"
                 required
                 value={form.amount}
                 onChange={(e) => setForm((f) => ({ ...f, amount: e.target.value }))}
