@@ -4,14 +4,18 @@ import { useEffect, useMemo, useState, useTransition } from "react";
 import { AppShell } from "@/components/AppShell";
 import {
   addIncomeSource,
+  deleteIncomeOverride,
   deleteIncomeSource,
+  listIncomeOverrides,
   listIncomeSources,
+  upsertIncomeOverride,
   updateIncomeSource,
 } from "@/lib/actions/income";
 import { currentMonthKey, formatMonthLabel } from "@/lib/dates";
 import { formatINR } from "@/lib/finance";
 
 type Source = Awaited<ReturnType<typeof listIncomeSources>>[number];
+type Override = Awaited<ReturnType<typeof listIncomeOverrides>>[number];
 
 type FormState = {
   name: string;
@@ -22,6 +26,12 @@ type FormState = {
   monthKey: string;
 };
 
+type OverrideFormState = {
+  sourceId: string;
+  monthKey: string;
+  amount: string;
+};
+
 const emptyForm = (): FormState => ({
   name: "",
   amount: "",
@@ -29,6 +39,12 @@ const emptyForm = (): FormState => ({
   cadence: "Monthly",
   nextDate: "",
   monthKey: currentMonthKey(),
+});
+
+const emptyOverrideForm = (): OverrideFormState => ({
+  sourceId: "",
+  monthKey: currentMonthKey(),
+  amount: "",
 });
 
 function monthOptions() {
@@ -44,15 +60,34 @@ function monthOptions() {
 
 export default function IncomePage() {
   const [sources, setSources] = useState<Source[]>([]);
+  const [overrides, setOverrides] = useState<Override[]>([]);
   const [form, setForm] = useState<FormState>(emptyForm);
+  const [overrideForm, setOverrideForm] = useState<OverrideFormState>(emptyOverrideForm);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [overrideError, setOverrideError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
   const months = useMemo(() => monthOptions(), []);
+  const recurringSources = useMemo(
+    () => sources.filter((source) => source.recurring),
+    [sources],
+  );
 
   function refresh() {
     startTransition(async () => {
-      setSources(await listIncomeSources());
+      const [nextSources, nextOverrides] = await Promise.all([
+        listIncomeSources(),
+        listIncomeOverrides(),
+      ]);
+      setSources(nextSources);
+      setOverrides(nextOverrides);
+      setOverrideForm((current) => {
+        if (current.sourceId) return current;
+        return {
+          ...current,
+          sourceId: nextSources.find((source) => source.recurring)?.id || "",
+        };
+      });
     });
   }
 
@@ -107,6 +142,25 @@ export default function IncomePage() {
     });
   }
 
+  function onSubmitOverride(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const fd = new FormData();
+    fd.set("sourceId", overrideForm.sourceId);
+    fd.set("monthKey", overrideForm.monthKey);
+    fd.set("amount", overrideForm.amount);
+
+    startTransition(async () => {
+      const res = await upsertIncomeOverride(fd);
+      if (res?.error) {
+        setOverrideError(res.error);
+        return;
+      }
+      setOverrideError(null);
+      setOverrideForm((current) => ({ ...current, amount: "" }));
+      refresh();
+    });
+  }
+
   return (
     <AppShell
       title="Sources of income"
@@ -124,8 +178,125 @@ export default function IncomePage() {
         </p>
       </div>
 
+      <section className="mb-8 border border-line bg-white/50 p-5 anim-rise-delay-1">
+        <h2 className="text-lg font-bold text-ink">Month-wise recurring adjustments</h2>
+        <p className="mt-1 text-sm text-ink-soft">
+          Override a recurring source amount for a specific month without changing other months.
+        </p>
+
+        {recurringSources.length === 0 ? (
+          <p className="mt-4 text-sm text-ink-soft">Add a recurring source first to set month-wise income.</p>
+        ) : (
+          <form className="mt-4 grid gap-3 md:grid-cols-[1.2fr_1fr_1fr_auto]" onSubmit={onSubmitOverride}>
+            <label className="block">
+              <span className="mb-1 block font-mono text-[11px] uppercase tracking-wider text-ink-soft">
+                Source
+              </span>
+              <select
+                className="field"
+                required
+                value={overrideForm.sourceId}
+                onChange={(e) =>
+                  setOverrideForm((state) => ({ ...state, sourceId: e.target.value }))
+                }
+              >
+                <option value="" disabled>
+                  Select source
+                </option>
+                {recurringSources.map((source) => (
+                  <option key={source.id} value={source.id}>
+                    {source.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label className="block">
+              <span className="mb-1 block font-mono text-[11px] uppercase tracking-wider text-ink-soft">
+                Month
+              </span>
+              <select
+                className="field"
+                required
+                value={overrideForm.monthKey}
+                onChange={(e) =>
+                  setOverrideForm((state) => ({ ...state, monthKey: e.target.value }))
+                }
+              >
+                {months.map((month) => (
+                  <option key={month.key} value={month.key}>
+                    {month.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label className="block">
+              <span className="mb-1 block font-mono text-[11px] uppercase tracking-wider text-ink-soft">
+                Override amount (₹)
+              </span>
+              <input
+                className="field"
+                type="number"
+                min="0"
+                step="1"
+                required
+                value={overrideForm.amount}
+                onChange={(e) =>
+                  setOverrideForm((state) => ({ ...state, amount: e.target.value }))
+                }
+              />
+            </label>
+
+            <div className="flex items-end">
+              <button
+                type="submit"
+                disabled={pending}
+                className="btn-secondary w-full px-4 py-3 text-sm font-medium disabled:opacity-60"
+              >
+                Save month value
+              </button>
+            </div>
+          </form>
+        )}
+
+        {overrideError ? <p className="mt-3 text-sm text-coral">{overrideError}</p> : null}
+
+        <ul className="mt-4 space-y-2">
+          {overrides.map((item) => (
+            <li key={item.id} className="border border-line bg-white/65 px-4 py-3">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <p className="text-sm text-ink">
+                  <span className="font-semibold">{item.sourceName}</span> · {item.monthLabel}
+                </p>
+                <div className="flex items-center gap-3">
+                  <span className="font-mono text-sm font-medium text-ink">
+                    {formatINR(item.amount)}
+                  </span>
+                  <button
+                    type="button"
+                    className="text-xs text-coral"
+                    onClick={() =>
+                      startTransition(async () => {
+                        await deleteIncomeOverride(item.id);
+                        refresh();
+                      })
+                    }
+                  >
+                    Remove
+                  </button>
+                </div>
+              </div>
+            </li>
+          ))}
+          {overrides.length === 0 ? (
+            <li className="text-sm text-ink-soft">No month-wise overrides added yet.</li>
+          ) : null}
+        </ul>
+      </section>
+
       <div className="grid gap-8 lg:grid-cols-[1.2fr_0.8fr]">
-        <ul className="space-y-2 anim-rise-delay-1">
+        <ul className="space-y-2 anim-rise-delay-2">
           {sources.map((s) => (
             <li key={s.id} className="border border-line bg-white/50 px-4 py-4">
               <div className="flex flex-wrap items-start justify-between gap-3">
@@ -177,7 +348,7 @@ export default function IncomePage() {
         </ul>
 
         <form
-          className="border border-line bg-white/50 p-5 anim-rise-delay-2"
+          className="border border-line bg-white/50 p-5 anim-rise-delay-3"
           onSubmit={onSubmit}
         >
           <div className="flex items-center justify-between gap-3">

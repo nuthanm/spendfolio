@@ -8,17 +8,22 @@ datasource db {
 }
 
 model User {
-  id           String    @id @default(cuid())
-  email        String    @unique
-  passwordHash String
-  totpSecret   String?
-  totpEnabled  Boolean   @default(false)
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
-  sessions     Session[]
-  incomes      IncomeSource[]
-  expenses     Expense[]
-  fieldDefs    CustomFieldDef[]
+  id              String    @id @default(cuid())
+  email           String    @unique
+  passwordHash    String
+  totpSecret      String?
+  totpEnabled     Boolean   @default(false)
+  enabledModules  String    @default("[]") // JSON array: gold | silver | house
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  sessions        Session[]
+  incomes         IncomeSource[]
+  expenses        Expense[]
+  fieldDefs       CustomFieldDef[]
+  metalHoldings   MetalHolding[]
+  metalTx         MetalTransaction[]
+  houseProfiles   HouseProfile[]
+  houseExpenses   HouseExpense[]
 }
 
 model Session {
@@ -83,4 +88,73 @@ model CustomFieldDef {
   createdAt DateTime @default(now())
 
   @@index([userId])
+}
+
+model MetalHolding {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  metalType   String   // gold | silver
+  goalGrams   Float?
+  goalDate    String?
+  currentRate Float?
+  notes       String   @default("")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([userId, metalType])
+  @@index([userId])
+}
+
+model MetalTransaction {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  metalType   String   // gold | silver
+  type        String   // buy | sell
+  date        String
+  grams       Float
+  ratePerGram Float
+  totalAmount Float
+  note        String   @default("")
+  realizedPL  Float?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([userId, metalType])
+  @@index([userId, date])
+}
+
+model HouseProfile {
+  id            String   @id @default(cuid())
+  userId        String
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name          String   @default("Main residence")
+  address       String   @default("")
+  purchaseDate  String?
+  purchasePrice Float?
+  loanDetails   String   @default("{}") // JSON
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  expenses      HouseExpense[]
+
+  @@index([userId])
+}
+
+model HouseExpense {
+  id        String       @id @default(cuid())
+  userId    String
+  user      User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  houseId   String
+  house     HouseProfile @relation(fields: [houseId], references: [id], onDelete: Cascade)
+  date      String
+  category  String
+  amount    Float
+  note      String       @default("")
+  recurring Boolean      @default(false)
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+
+  @@index([userId, houseId])
+  @@index([userId, date])
 }

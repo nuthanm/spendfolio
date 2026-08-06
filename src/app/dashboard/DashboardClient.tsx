@@ -14,6 +14,7 @@ export default function DashboardClient() {
   const search = useSearchParams();
   const router = useRouter();
   const initialMonth = search.get("month") || undefined;
+  const initialFy = search.get("fy") || undefined;
   const [data, setData] = useState<Dash | null>(null);
   const [pending, startTransition] = useTransition();
   const [hoveredLabel, setHoveredLabel] = useState<string | null>(null);
@@ -21,12 +22,21 @@ export default function DashboardClient() {
 
   useEffect(() => {
     startTransition(async () => {
-      const d = await getDashboardData(initialMonth);
+      const d = await getDashboardData(initialMonth, initialFy);
       setData(d);
       setHoveredLabel(null);
       setSelectedLabel(null);
     });
-  }, [initialMonth]);
+  }, [initialMonth, initialFy]);
+
+  function pushDashboardQuery(next: { month?: string; fy?: string }) {
+    const params = new URLSearchParams(search.toString());
+    if (next.month) params.set("month", next.month);
+    else params.delete("month");
+    if (next.fy) params.set("fy", next.fy);
+    else params.delete("fy");
+    router.push(`/dashboard?${params.toString()}`);
+  }
 
   if (!data) {
     return (
@@ -42,23 +52,53 @@ export default function DashboardClient() {
       subtitle="Live monthly math — income, spend, buffer, and renewals that need attention."
     >
       <div className="mb-6 flex flex-wrap items-center justify-between gap-3 anim-rise">
-        <label className="flex items-center gap-3">
-          <span className="font-mono text-[11px] uppercase tracking-wider text-ink-soft">
-            Month
-          </span>
-          <select
-            className="field w-auto py-2"
-            value={data.monthKey}
-            disabled={pending}
-            onChange={(e) => router.push(`/dashboard?month=${e.target.value}`)}
-          >
-            {data.months.map((m) => (
-              <option key={m.key} value={m.key}>
-                {m.label}
-              </option>
-            ))}
-          </select>
-        </label>
+        <div className="flex flex-wrap items-center gap-3">
+          <label className="flex items-center gap-3">
+            <span className="font-mono text-[11px] uppercase tracking-wider text-ink-soft">
+              Month
+            </span>
+            <select
+              className="field w-auto py-2"
+              value={data.monthKey}
+              disabled={pending}
+              onChange={(e) =>
+                pushDashboardQuery({
+                  month: e.target.value,
+                  fy: String(data.financialYear.selectedStartYear),
+                })
+              }
+            >
+              {data.months.map((m) => (
+                <option key={m.key} value={m.key}>
+                  {m.label}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label className="flex items-center gap-3">
+            <span className="font-mono text-[11px] uppercase tracking-wider text-ink-soft">
+              Financial year
+            </span>
+            <select
+              className="field w-auto py-2"
+              value={String(data.financialYear.selectedStartYear)}
+              disabled={pending}
+              onChange={(e) =>
+                pushDashboardQuery({
+                  month: data.monthKey,
+                  fy: e.target.value,
+                })
+              }
+            >
+              {data.financialYear.options.map((fy) => (
+                <option key={fy.startYear} value={fy.startYear}>
+                  {fy.label}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
         <span className="font-mono text-xs text-ink-soft">
           {data.isCurrent ? "Showing current month" : `Historical view · ${data.monthLabel}`}
         </span>
@@ -77,6 +117,38 @@ export default function DashboardClient() {
           </p>
           <p className="mt-3 text-sm text-ink-soft">{data.health.note}</p>
         </div>
+      </section>
+
+      <section className="mt-10 anim-rise-delay-1">
+        <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
+          <h2 className="text-xl font-bold text-ink">{data.financialYear.selectedLabel} summary</h2>
+          <p className="font-mono text-xs text-ink-soft">Apr to Mar view across 12 months</p>
+        </div>
+        <div className="grid gap-4 md:grid-cols-4">
+          <Stat label="FY Income" value={data.financialYear.totals.income} note="12-month total" />
+          <Stat label="FY Expenses" value={data.financialYear.totals.expense} note="12-month total" />
+          <Stat label="FY P/L" value={data.financialYear.totals.profit} note="income − expenses" accent={data.financialYear.totals.profit >= 0} />
+          <div className="border border-line bg-white/50 p-5">
+            <p className="font-mono text-[11px] uppercase tracking-wider text-ink-soft">FY Trend</p>
+            <p className="mt-2 font-mono text-sm text-ink-soft">
+              Avg P/L {formatINR(data.financialYear.totals.averageMonthlyProfit)} / month
+            </p>
+            <p className="mt-2 text-sm text-ink-soft">
+              Best {data.financialYear.bestMonth.shortLabel}: {formatINR(data.financialYear.bestMonth.profit)}
+            </p>
+            <p className="mt-1 text-sm text-ink-soft">
+              Worst {data.financialYear.worstMonth.shortLabel}: {formatINR(data.financialYear.worstMonth.profit)}
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <section className="mt-10 anim-rise-delay-2">
+        <div className="mb-4 flex items-end justify-between gap-4">
+          <h2 className="text-xl font-bold text-ink">Month on month profit / loss</h2>
+          <p className="font-mono text-xs text-ink-soft">tile graph · {data.financialYear.selectedLabel}</p>
+        </div>
+        <MonthPnLGraph months={data.financialYear.months} />
       </section>
 
       {data.recurringTiles.length > 0 ? (
@@ -246,6 +318,57 @@ export default function DashboardClient() {
         </div>
       </section>
     </AppShell>
+  );
+}
+
+function MonthPnLGraph({
+  months,
+}: {
+  months: Dash["financialYear"]["months"];
+}) {
+  const maxAbsProfit = Math.max(...months.map((month) => Math.abs(month.profit)), 1);
+
+  return (
+    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      {months.map((month) => {
+        const bar = Math.max(6, Math.round((Math.abs(month.profit) / maxAbsProfit) * 100));
+        return (
+          <div key={month.key} className="border border-line bg-white/50 p-4">
+            <div className="flex items-start justify-between gap-2">
+              <p className="font-semibold text-ink">{month.shortLabel}</p>
+              <span
+                className={`font-mono text-[10px] uppercase tracking-wide ${
+                  month.status === "profit"
+                    ? "text-mint"
+                    : month.status === "loss"
+                      ? "text-coral"
+                      : "text-ink-soft"
+                }`}
+              >
+                {month.status}
+              </span>
+            </div>
+            <p className="mt-2 font-mono text-xs text-ink-soft">{month.label}</p>
+            <div className="mt-3 h-2.5 w-full bg-paper-deep">
+              <div
+                className={month.status === "loss" ? "h-full bg-coral" : "h-full bg-mint"}
+                style={{ width: `${bar}%` }}
+              />
+            </div>
+            <p
+              className={`mt-2 font-mono text-sm ${
+                month.profit >= 0 ? "text-mint" : "text-coral"
+              }`}
+            >
+              {formatINR(month.profit)}
+            </p>
+            <p className="mt-1 font-mono text-[11px] text-ink-soft">
+              In {formatINR(month.income)} · Out {formatINR(month.expense)}
+            </p>
+          </div>
+        );
+      })}
+    </div>
   );
 }
 
