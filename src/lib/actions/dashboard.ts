@@ -20,12 +20,67 @@ function sourceIdFromOverrideCadence(cadence: string) {
   return sourceId || null;
 }
 
+function toDateOnly(date: Date) {
+  const next = new Date(date);
+  next.setHours(0, 0, 0, 0);
+  return next;
+}
+
+function toDateKey(date: Date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(
+    date.getDate(),
+  ).padStart(2, "0")}`;
+}
+
+function parseDateKey(dateStr: string) {
+  const [yRaw, mRaw, dRaw] = dateStr.split("-");
+  const y = Number(yRaw);
+  const m = Number(mRaw);
+  const d = Number(dRaw);
+  if (!Number.isInteger(y) || !Number.isInteger(m) || !Number.isInteger(d)) return null;
+  if (m < 1 || m > 12 || d < 1 || d > 31) return null;
+  return { y, m, d };
+}
+
+function lastDayOfMonth(year: number, month1Based: number) {
+  return new Date(year, month1Based, 0).getDate();
+}
+
+function nextMonthlyDateFromAnchor(anchorDateStr: string, today = new Date()) {
+  const parsed = parseDateKey(anchorDateStr);
+  if (!parsed) return anchorDateStr;
+
+  const todayDate = toDateOnly(today);
+  const anchorDate = toDateOnly(new Date(anchorDateStr + "T00:00:00"));
+  if (Number.isNaN(anchorDate.getTime())) return anchorDateStr;
+  if (anchorDate >= todayDate) return anchorDateStr;
+
+  const anchorDay = parsed.d;
+  let year = todayDate.getFullYear();
+  let month = todayDate.getMonth() + 1;
+
+  const thisMonthDay = Math.min(anchorDay, lastDayOfMonth(year, month));
+  let candidate = toDateOnly(new Date(year, month - 1, thisMonthDay));
+
+  if (candidate < todayDate) {
+    month += 1;
+    if (month > 12) {
+      month = 1;
+      year += 1;
+    }
+    const nextMonthDay = Math.min(anchorDay, lastDayOfMonth(year, month));
+    candidate = toDateOnly(new Date(year, month - 1, nextMonthDay));
+  }
+
+  return toDateKey(candidate);
+}
+
 export async function getDashboardData(monthKey?: string, fyStartYear?: string) {
   const user = await requireUser();
   const nowMonthKey = currentMonthKey();
   const key = monthKey || nowMonthKey;
 
-  const [incomes, expenses, expenseMonthRows, recurringExpenses] = await Promise.all([
+  const [incomes, expenses, expenseMonthRows, renewalRows] = await Promise.all([
     prisma.incomeSource.findMany({ where: { userId: user.id } }),
     prisma.expense.findMany({
       where: { userId: user.id, monthKey: key },
@@ -38,11 +93,9 @@ export async function getDashboardData(monthKey?: string, fyStartYear?: string) 
     prisma.expense.findMany({
       where: {
         userId: user.id,
-        recurring: true,
         renewalDate: { not: null },
       },
-      orderBy: { renewalDate: "asc" },
-      take: 12,
+      orderBy: [{ recurring: "desc" }, { renewalDate: "asc" }],
     }),
   ]);
 
@@ -125,38 +178,50 @@ export async function getDashboardData(monthKey?: string, fyStartYear?: string) 
     }))
     .sort((a, b) => b.amount - a.amount);
 
-  const today = new Date().toISOString().slice(0, 10);
+  const todayDate = toDateOnly(new Date());
+  const today = toDateKey(todayDate);
   const horizon = new Date();
   horizon.setDate(horizon.getDate() + 45);
-  const horizonStr = horizon.toISOString().slice(0, 10);
+  const horizonStr = toDateKey(horizon);
 
-  const renewalCandidates = await prisma.expense.findMany({
-    where: {
-      userId: user.id,
-      renewalDate: { not: null, gte: today, lte: horizonStr },
-    },
-    orderBy: { renewalDate: "asc" },
-    take: 20,
-  });
+  const renewalCandidates = renewalRows
+    .map((e) => {
+      const due = e.recurring
+        ? nextMonthlyDateFromAnchor(e.renewalDate!, todayDate)
+        : e.renewalDate!;
+      return { ...e, due };
+    })
+    .filter((e) => e.due >= today && e.due <= horizonStr)
+    .sort((a, b) => a.due.localeCompare(b.due))
+    .slice(0, 20);
 
   const renewals = renewalCandidates.map((e) => ({
     id: e.id,
     title: e.label,
     amount: e.amount,
-    due: e.renewalDate!,
-    daysLeft: daysUntil(e.renewalDate) ?? 999,
+    due: e.due,
+    daysLeft: daysUntil(e.due) ?? 999,
     remarks: e.remarks,
     recurring: e.recurring,
   }));
 
-  const recurringTiles = recurringExpenses.map((e) => ({
-    id: e.id,
-    title: e.label,
-    amount: e.amount,
-    nextDate: e.renewalDate!,
-    daysLeft: daysUntil(e.renewalDate) ?? 999,
-    remarks: e.remarks,
-  }));
+  const recurringTiles = renewalRows
+    .filter((e) => e.recurring)
+    .map((e) => {
+      const nextDate = nextMonthlyDateFromAnchor(e.renewalDate!, todayDate);
+      return {
+        id: e.id,
+        title: e.label,
+        amount: e.amount,
+        date: e.date,
+        nextDate,
+        daysLeft: daysUntil(nextDate) ?? 999,
+        remarks: e.remarks,
+        customFields: e.customFields,
+      };
+    })
+    .sort((a, b) => a.nextDate.localeCompare(b.nextDate))
+    .slice(0, 12);
 
   const monthKeys = new Set(expenseMonthRows.map((row) => row.monthKey));
   for (const income of oneTimeIncomes) {

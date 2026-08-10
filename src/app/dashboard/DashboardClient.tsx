@@ -5,10 +5,22 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { AppShell } from "@/components/AppShell";
 import { AnimatedNumber } from "@/components/AnimatedNumber";
 import { getDashboardData } from "@/lib/actions/dashboard";
+import { updateExpense } from "@/lib/actions/expenses";
 import { formatINR } from "@/lib/finance";
 
 type Dash = Awaited<ReturnType<typeof getDashboardData>>;
 type Tile = Dash["tiles"][number];
+type RecurringTile = Dash["recurringTiles"][number];
+
+type RecurringEditState = {
+  id: string;
+  title: string;
+  amount: string;
+  date: string;
+  nextDate: string;
+  remarks: string;
+  customFields: string;
+};
 
 export default function DashboardClient() {
   const search = useSearchParams();
@@ -19,6 +31,9 @@ export default function DashboardClient() {
   const [pending, startTransition] = useTransition();
   const [hoveredLabel, setHoveredLabel] = useState<string | null>(null);
   const [selectedLabel, setSelectedLabel] = useState<string | null>(null);
+  const [recurringEdit, setRecurringEdit] = useState<RecurringEditState | null>(null);
+  const [recurringError, setRecurringError] = useState<string | null>(null);
+  const [savingRecurring, setSavingRecurring] = useState(false);
 
   useEffect(() => {
     startTransition(async () => {
@@ -26,8 +41,51 @@ export default function DashboardClient() {
       setData(d);
       setHoveredLabel(null);
       setSelectedLabel(null);
+      setRecurringEdit(null);
+      setRecurringError(null);
     });
   }, [initialMonth, initialFy]);
+
+  function startRecurringEdit(tile: RecurringTile) {
+    setRecurringEdit({
+      id: tile.id,
+      title: tile.title,
+      amount: String(tile.amount),
+      date: tile.date,
+      nextDate: tile.nextDate,
+      remarks: tile.remarks || "",
+      customFields: tile.customFields || "{}",
+    });
+    setRecurringError(null);
+  }
+
+  async function saveRecurringEdit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!recurringEdit) return;
+
+    const fd = new FormData();
+    fd.set("date", recurringEdit.date);
+    fd.set("label", recurringEdit.title.trim());
+    fd.set("amount", recurringEdit.amount);
+    fd.set("remarks", recurringEdit.remarks);
+    fd.set("recurring", "true");
+    fd.set("renewalDate", recurringEdit.nextDate);
+    fd.set("customFields", recurringEdit.customFields || "{}");
+
+    setSavingRecurring(true);
+    setRecurringError(null);
+    const res = await updateExpense(recurringEdit.id, fd);
+    if (res?.error) {
+      setRecurringError(res.error);
+      setSavingRecurring(false);
+      return;
+    }
+
+    const refreshed = await getDashboardData(initialMonth, initialFy);
+    setData(refreshed);
+    setRecurringEdit(null);
+    setSavingRecurring(false);
+  }
 
   function pushDashboardQuery(next: { month?: string; fy?: string }) {
     const params = new URLSearchParams(search.toString());
@@ -127,26 +185,36 @@ export default function DashboardClient() {
           </p>
         </div>
         <div className="grid gap-4 md:grid-cols-4">
-          <Stat
-            label="FY Income"
-            value={data.financialYear.totals.income}
-            note={`${data.financialYear.months.length}-month total`}
-          />
-          <Stat
-            label="FY Expenses"
-            value={data.financialYear.totals.expense}
-            note={`${data.financialYear.months.length}-month total`}
-          />
-          <Stat label="FY P/L" value={data.financialYear.totals.profit} note="income − expenses" accent={data.financialYear.totals.profit >= 0} />
-          <div className="border border-line bg-white/50 p-5">
+          <div className="border border-mint/35 bg-gradient-to-b from-white/80 to-mint/5 p-5 shadow-[0_10px_24px_rgba(26,143,110,0.08)]">
+            <p className="font-mono text-[11px] uppercase tracking-wider text-mint">FY Income</p>
+            <p className="mt-3 text-3xl font-bold number-tick text-mint">
+              <AnimatedNumber value={data.financialYear.totals.income} format={(n) => formatINR(n)} />
+            </p>
+            <p className="mt-2 font-mono text-xs text-ink-soft">{data.financialYear.months.length}-month inflow</p>
+          </div>
+          <div className="border border-coral/35 bg-gradient-to-b from-white/80 to-coral/5 p-5 shadow-[0_10px_24px_rgba(212,85,58,0.08)]">
+            <p className="font-mono text-[11px] uppercase tracking-wider text-coral">FY Expenses</p>
+            <p className="mt-3 text-3xl font-bold number-tick text-coral">
+              <AnimatedNumber value={data.financialYear.totals.expense} format={(n) => formatINR(n)} />
+            </p>
+            <p className="mt-2 font-mono text-xs text-ink-soft">{data.financialYear.months.length}-month outflow</p>
+          </div>
+          <div className={`border p-5 shadow-[0_10px_24px_rgba(20,36,30,0.08)] ${data.financialYear.totals.profit >= 0 ? "border-mint/35 bg-gradient-to-b from-white/80 to-mint/5" : "border-coral/35 bg-gradient-to-b from-white/80 to-coral/5"}`}>
+            <p className="font-mono text-[11px] uppercase tracking-wider text-ink-soft">FY P/L</p>
+            <p className={`mt-3 text-3xl font-bold number-tick ${data.financialYear.totals.profit >= 0 ? "text-mint" : "text-coral"}`}>
+              <AnimatedNumber value={data.financialYear.totals.profit} format={(n) => formatINR(n)} />
+            </p>
+            <p className="mt-2 font-mono text-xs text-ink-soft">Net position</p>
+          </div>
+          <div className="border border-line bg-white/75 p-5 shadow-[0_10px_24px_rgba(20,36,30,0.05)]">
             <p className="font-mono text-[11px] uppercase tracking-wider text-ink-soft">FY Trend</p>
             <p className="mt-2 font-mono text-sm text-ink-soft">
               Avg P/L {formatINR(data.financialYear.totals.averageMonthlyProfit)} / month
             </p>
-            <p className="mt-2 text-sm text-ink-soft">
+            <p className="mt-2 text-sm text-mint">
               Best {data.financialYear.bestMonth.shortLabel}: {formatINR(data.financialYear.bestMonth.profit)}
             </p>
-            <p className="mt-1 text-sm text-ink-soft">
+            <p className="mt-1 text-sm text-coral">
               Worst {data.financialYear.worstMonth.shortLabel}: {formatINR(data.financialYear.worstMonth.profit)}
             </p>
           </div>
@@ -156,7 +224,7 @@ export default function DashboardClient() {
       <section className="mt-10 anim-rise-delay-2">
         <div className="mb-4 flex items-end justify-between gap-4">
           <h2 className="text-xl font-bold text-ink">Month on month profit / loss</h2>
-          <p className="font-mono text-xs text-ink-soft">tile graph · {data.financialYear.selectedLabel}</p>
+          <p className="font-mono text-xs text-ink-soft">ledger view · {data.financialYear.selectedLabel}</p>
         </div>
         <MonthPnLGraph months={data.financialYear.months} />
       </section>
@@ -165,12 +233,14 @@ export default function DashboardClient() {
         <section className="mt-10 anim-rise-delay-2">
           <div className="mb-4 flex items-end justify-between gap-4">
             <h2 className="text-xl font-bold text-ink">Upcoming recurring</h2>
-            <p className="font-mono text-xs text-[#c45f12]">orange · next dates</p>
+            <p className="font-mono text-xs text-[#c45f12]">orange · click card to edit</p>
           </div>
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             {data.recurringTiles.map((tile) => (
-              <div
+              <button
                 key={tile.id}
+                type="button"
+                onClick={() => startRecurringEdit(tile)}
                 className="border border-[#e67e22]/40 bg-[rgba(230,126,34,0.08)] p-3"
               >
                 <p className="text-sm font-semibold text-ink">{tile.title}</p>
@@ -184,9 +254,115 @@ export default function DashboardClient() {
                 {tile.remarks ? (
                   <p className="mt-1 line-clamp-2 text-xs text-ink-soft">{tile.remarks}</p>
                 ) : null}
-              </div>
+                <p className="mt-2 font-mono text-[10px] uppercase tracking-wide text-[#c45f12]">
+                  edit and save
+                </p>
+              </button>
             ))}
           </div>
+
+          {recurringEdit ? (
+            <form
+              className="mt-4 border border-[#e67e22]/40 bg-[rgba(230,126,34,0.08)] p-4"
+              onSubmit={saveRecurringEdit}
+            >
+              <div className="mb-3 flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-sm font-semibold text-ink">Edit recurring entry</p>
+                  <p className="text-xs text-ink-soft">{recurringEdit.title}</p>
+                </div>
+                <button
+                  type="button"
+                  className="text-xs text-ink-soft hover:text-ink"
+                  onClick={() => {
+                    setRecurringEdit(null);
+                    setRecurringError(null);
+                  }}
+                >
+                  Cancel
+                </button>
+              </div>
+
+              <div className="grid gap-3 md:grid-cols-4">
+                <label className="block">
+                  <span className="mb-1.5 block font-mono text-[11px] uppercase tracking-wider text-ink-soft">
+                    Debited date
+                  </span>
+                  <input
+                    className="field"
+                    type="date"
+                    required
+                    value={recurringEdit.date}
+                    onChange={(e) =>
+                      setRecurringEdit((current) =>
+                        current ? { ...current, date: e.target.value } : current,
+                      )
+                    }
+                  />
+                </label>
+
+                <label className="block">
+                  <span className="mb-1.5 block font-mono text-[11px] uppercase tracking-wider text-ink-soft">
+                    Amount (₹)
+                  </span>
+                  <input
+                    className="field"
+                    type="number"
+                    step="any"
+                    required
+                    value={recurringEdit.amount}
+                    onChange={(e) =>
+                      setRecurringEdit((current) =>
+                        current ? { ...current, amount: e.target.value } : current,
+                      )
+                    }
+                  />
+                </label>
+
+                <label className="block">
+                  <span className="mb-1.5 block font-mono text-[11px] uppercase tracking-wider text-ink-soft">
+                    Next recurring date
+                  </span>
+                  <input
+                    className="field"
+                    type="date"
+                    required
+                    value={recurringEdit.nextDate}
+                    onChange={(e) =>
+                      setRecurringEdit((current) =>
+                        current ? { ...current, nextDate: e.target.value } : current,
+                      )
+                    }
+                  />
+                </label>
+
+                <label className="block md:col-span-4">
+                  <span className="mb-1.5 block font-mono text-[11px] uppercase tracking-wider text-ink-soft">
+                    Remarks
+                  </span>
+                  <textarea
+                    className="field min-h-20 resize-y"
+                    value={recurringEdit.remarks}
+                    onChange={(e) =>
+                      setRecurringEdit((current) =>
+                        current ? { ...current, remarks: e.target.value } : current,
+                      )
+                    }
+                  />
+                </label>
+              </div>
+
+              {recurringError ? <p className="mt-3 text-sm text-coral">{recurringError}</p> : null}
+
+              <button
+                type="submit"
+                disabled={savingRecurring}
+                className="btn-primary mt-4 px-4 py-2 text-sm disabled:opacity-60"
+              >
+                {savingRecurring ? "Saving..." : "Save recurring entry"}
+              </button>
+            </form>
+          ) : null}
         </section>
       ) : null}
 
@@ -337,26 +513,39 @@ function MonthPnLGraph({
   months: Dash["financialYear"]["months"];
 }) {
   const maxAbsProfit = Math.max(...months.map((month) => Math.abs(month.profit)), 1);
+  const maxFlow = Math.max(...months.map((month) => Math.max(month.income, month.expense)), 1);
 
   return (
     <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-      {months.map((month) => {
+      {months.map((month, index) => {
+        const prev = index > 0 ? months[index - 1] : null;
+        const delta = prev ? month.profit - prev.profit : null;
+        const deltaLabel =
+          delta === null ? "base" : delta > 0 ? `+${formatINR(delta)}` : formatINR(delta);
+        const deltaTone = delta === null ? "text-ink-soft" : delta >= 0 ? "text-mint" : "text-coral";
         const bar = Math.max(6, Math.round((Math.abs(month.profit) / maxAbsProfit) * 100));
+        const incomeBar = Math.max(8, Math.round((month.income / maxFlow) * 100));
+        const expenseBar = Math.max(8, Math.round((month.expense / maxFlow) * 100));
         return (
-          <div key={month.key} className="border border-line bg-white/50 p-4">
+          <div key={month.key} className="border border-line bg-white/80 p-4 shadow-[0_10px_24px_rgba(20,36,30,0.08)]">
             <div className="flex items-start justify-between gap-2">
               <p className="font-semibold text-ink">{month.shortLabel}</p>
-              <span
-                className={`font-mono text-[10px] uppercase tracking-wide ${
-                  month.status === "profit"
-                    ? "text-mint"
-                    : month.status === "loss"
-                      ? "text-coral"
-                      : "text-ink-soft"
-                }`}
-              >
-                {month.status}
-              </span>
+              <div className="text-right">
+                <span
+                  className={`block font-mono text-[10px] uppercase tracking-wide ${
+                    month.status === "profit"
+                      ? "text-mint"
+                      : month.status === "loss"
+                        ? "text-coral"
+                        : "text-ink-soft"
+                  }`}
+                >
+                  {month.status}
+                </span>
+                <span className={`mt-1 inline-block rounded-full border border-line/80 px-2 py-0.5 font-mono text-[10px] ${deltaTone}`}>
+                  {deltaLabel}
+                </span>
+              </div>
             </div>
             <p className="mt-2 font-mono text-xs text-ink-soft">{month.label}</p>
             <div className="mt-3 h-2.5 w-full bg-paper-deep">
@@ -372,9 +561,25 @@ function MonthPnLGraph({
             >
               {formatINR(month.profit)}
             </p>
-            <p className="mt-1 font-mono text-[11px] text-ink-soft">
-              In {formatINR(month.income)} · Out {formatINR(month.expense)}
-            </p>
+            <div className="mt-2 space-y-1.5">
+              <div className="flex items-center gap-2">
+                <span className="w-7 shrink-0 font-mono text-[10px] text-mint">IN</span>
+                <div className="h-1.5 flex-1 bg-paper-deep">
+                  <div className="h-full bg-mint" style={{ width: `${incomeBar}%` }} />
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="w-7 shrink-0 font-mono text-[10px] text-coral">OUT</span>
+                <div className="h-1.5 flex-1 bg-paper-deep">
+                  <div className="h-full bg-coral" style={{ width: `${expenseBar}%` }} />
+                </div>
+              </div>
+            </div>
+            <div className="mt-2 flex items-center gap-3 font-mono text-[11px]">
+              <span className="text-mint">In {formatINR(month.income)}</span>
+              <span className="text-ink-soft">·</span>
+              <span className="text-coral">Out {formatINR(month.expense)}</span>
+            </div>
           </div>
         );
       })}
