@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { AppShell } from "@/components/AppShell";
 import { AnimatedNumber } from "@/components/AnimatedNumber";
 import { getDashboardData } from "@/lib/actions/dashboard";
-import { updateExpense } from "@/lib/actions/expenses";
+import { recordRecurringDebit } from "@/lib/actions/expenses";
 import { formatINR } from "@/lib/finance";
 
 type Dash = Awaited<ReturnType<typeof getDashboardData>>;
@@ -34,6 +34,7 @@ export default function DashboardClient() {
   const [recurringEdit, setRecurringEdit] = useState<RecurringEditState | null>(null);
   const [recurringError, setRecurringError] = useState<string | null>(null);
   const [savingRecurring, setSavingRecurring] = useState(false);
+  const [recurringSavedFlash, setRecurringSavedFlash] = useState(false);
 
   useEffect(() => {
     startTransition(async () => {
@@ -43,6 +44,7 @@ export default function DashboardClient() {
       setSelectedLabel(null);
       setRecurringEdit(null);
       setRecurringError(null);
+      setRecurringSavedFlash(false);
     });
   }, [initialMonth, initialFy]);
 
@@ -74,7 +76,7 @@ export default function DashboardClient() {
 
     setSavingRecurring(true);
     setRecurringError(null);
-    const res = await updateExpense(recurringEdit.id, fd);
+    const res = await recordRecurringDebit(recurringEdit.id, fd);
     if (res?.error) {
       setRecurringError(res.error);
       setSavingRecurring(false);
@@ -85,6 +87,8 @@ export default function DashboardClient() {
     setData(refreshed);
     setRecurringEdit(null);
     setSavingRecurring(false);
+    setRecurringSavedFlash(true);
+    setTimeout(() => setRecurringSavedFlash(false), 1800);
   }
 
   function pushDashboardQuery(next: { month?: string; fy?: string }) {
@@ -260,6 +264,12 @@ export default function DashboardClient() {
               </button>
             ))}
           </div>
+
+          {recurringSavedFlash ? (
+            <p className="mt-3 inline-block border border-mint/40 bg-mint/10 px-3 py-1 font-mono text-xs text-mint">
+              Saved to Expenses and next recurring updated.
+            </p>
+          ) : null}
 
           {recurringEdit ? (
             <form

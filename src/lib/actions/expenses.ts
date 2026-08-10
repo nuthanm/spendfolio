@@ -129,6 +129,42 @@ export async function updateExpense(id: string, formData: FormData) {
   return { ok: true };
 }
 
+export async function recordRecurringDebit(id: string, formData: FormData) {
+  const user = await requireUser();
+  const data = parseExpenseForm(formData);
+  const error = validateExpense({ ...data, recurring: true });
+  if (error) return { error };
+
+  const source = await prisma.expense.findFirst({
+    where: { id, userId: user.id, recurring: true },
+  });
+  if (!source) return { error: "Recurring expense not found." };
+
+  await prisma.$transaction([
+    prisma.expense.updateMany({
+      where: { id: source.id, userId: user.id },
+      data: { recurring: false, renewalDate: null },
+    }),
+    prisma.expense.create({
+      data: {
+        userId: user.id,
+        date: data.date,
+        label: data.label,
+        amount: data.amount,
+        remarks: data.remarks,
+        recurring: true,
+        renewalDate: data.renewalDate,
+        customFields: data.customFields,
+        monthKey: monthKeyFromDate(data.date),
+      },
+    }),
+  ]);
+
+  revalidatePath("/expenses");
+  revalidatePath("/dashboard");
+  return { ok: true };
+}
+
 export async function deleteExpense(id: string) {
   const user = await requireUser();
   await prisma.expense.deleteMany({ where: { id, userId: user.id } });
