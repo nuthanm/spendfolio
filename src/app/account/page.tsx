@@ -85,11 +85,11 @@ export default function AccountPage() {
       if (data.gold.transactions.length > 0) {
         lines.push("");
         lines.push("=== GOLD TRANSACTIONS ===");
-        lines.push("date,type,grams,rate,amount");
+        lines.push("date,type,grams,ratePerGram,totalAmount");
         lines.push(
           ...data.gold.transactions.map(
             (t) =>
-              `${t.date},${t.transactionType},${t.grams},${t.rate},${t.totalCost}`,
+              `${t.date},${t.type},${t.grams},${t.ratePerGram},${t.totalAmount}`,
           ),
         );
       }
@@ -98,11 +98,11 @@ export default function AccountPage() {
       if (data.silver.transactions.length > 0) {
         lines.push("");
         lines.push("=== SILVER TRANSACTIONS ===");
-        lines.push("date,type,grams,rate,amount");
+        lines.push("date,type,grams,ratePerGram,totalAmount");
         lines.push(
           ...data.silver.transactions.map(
             (t) =>
-              `${t.date},${t.transactionType},${t.grams},${t.rate},${t.totalCost}`,
+              `${t.date},${t.type},${t.grams},${t.ratePerGram},${t.totalAmount}`,
           ),
         );
       }
