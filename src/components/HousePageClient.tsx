@@ -13,6 +13,7 @@ import {
   type HouseTrackerData,
 } from "@/lib/actions/house";
 import { formatINR } from "@/lib/finance";
+import { formatMonthLabel } from "@/lib/dates";
 import { HOUSE_EXPENSE_CATEGORIES } from "@/lib/house";
 
 type HouseExpense = HouseTrackerData["expenses"][number];
@@ -286,13 +287,7 @@ export function HousePageClient({ initialData }: { initialData: HouseTrackerData
             EMI months left: {data.profile.details.outstandingEmiMonths ?? 0}
           </p>
         </div>
-        <div className="border border-line bg-white/50 p-4">
-          <p className="font-mono text-[11px] uppercase tracking-wider text-ink-soft">Export</p>
-          <p className="mt-2 text-sm text-ink-soft">Download complete house data to Excel.</p>
-          <a href="/api/house/export" className="mt-2 inline-block text-sm text-mint hover:underline">
-            Export to Excel
-          </a>
-        </div>
+
       </div>
 
       {error ? <div className="border border-coral/50 bg-red-100/70 px-3 py-2 text-sm text-red-700">{error}</div> : null}
@@ -450,7 +445,7 @@ export function HousePageClient({ initialData }: { initialData: HouseTrackerData
           <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             {data.totals.monthlyBreakdown.slice(0, 8).map((row) => (
               <div key={row.monthKey} className="border border-line/70 bg-white/40 p-3">
-                <p className="font-mono text-xs text-ink-soft">{row.monthKey}</p>
+                <p className="font-mono text-xs text-ink-soft">{formatMonthLabel(row.monthKey)}</p>
                 <p className="mt-1 text-lg font-bold text-ink">{formatINR(row.total)}</p>
               </div>
             ))}

@@ -80,7 +80,7 @@ export async function getDashboardData(monthKey?: string, fyStartYear?: string) 
   const nowMonthKey = currentMonthKey();
   const key = monthKey || nowMonthKey;
 
-  const [incomes, expenses, expenseMonthRows, renewalRows] = await Promise.all([
+  const [incomes, expenses, expenseMonthRows, renewalRows, houseProfile, houseExpenses] = await Promise.all([
     prisma.incomeSource.findMany({ where: { userId: user.id } }),
     prisma.expense.findMany({
       where: { userId: user.id, monthKey: key },
@@ -96,6 +96,14 @@ export async function getDashboardData(monthKey?: string, fyStartYear?: string) 
         renewalDate: { not: null },
       },
       orderBy: [{ recurring: "desc" }, { renewalDate: "asc" }],
+    }),
+    prisma.houseProfile.findFirst({
+      where: { userId: user.id },
+      orderBy: { createdAt: "asc" },
+    }),
+    prisma.houseExpense.findMany({
+      where: { userId: user.id },
+      orderBy: [{ date: "desc" }],
     }),
   ]);
 
@@ -282,6 +290,42 @@ export async function getDashboardData(monthKey?: string, fyStartYear?: string) 
     label: formatMonthLabel(k),
   }));
 
+  // Calculate house expenses data
+  const currentMonthHouseExpenses = houseExpenses
+    .filter((e) => e.date.startsWith(key))
+    .reduce((sum, e) => sum + e.amount, 0);
+
+  const totalHouseExpenses = houseExpenses.reduce((sum, e) => sum + e.amount, 0);
+
+  // Parse house loan details
+  let loanInfo = {
+    outstanding: 0,
+    sanctioned: 0,
+    emorOutstanding: 0,
+    emorTotal: 0,
+    percentagePending: 0,
+  };
+
+  if (houseProfile) {
+    try {
+      const details = JSON.parse(houseProfile.loanDetails || "{}");
+      const outstanding = details.loanOutstandingAmount || 0;
+      const sanctioned = details.loanSanctionedAmount || 0;
+      const emiMonths = details.outstandingEmiMonths || 0;
+      const totalEmiMonths = details.totalEmiMonths || 0;
+
+      loanInfo = {
+        outstanding: outstanding,
+        sanctioned: sanctioned,
+        emorOutstanding: emiMonths,
+        emorTotal: totalEmiMonths || emiMonths,
+        percentagePending: sanctioned > 0 ? Math.round((outstanding / sanctioned) * 100) : 0,
+      };
+    } catch {
+      // Parse error, use defaults
+    }
+  }
+
   return {
     monthKey: key,
     monthLabel: formatMonthLabel(key),
@@ -294,6 +338,11 @@ export async function getDashboardData(monthKey?: string, fyStartYear?: string) 
     renewals,
     recent: expenses.slice(0, 8),
     months,
+    house: {
+      currentMonthExpenses: currentMonthHouseExpenses,
+      totalExpenses: totalHouseExpenses,
+      loanInfo,
+    },
     financialYear: {
       selectedStartYear: selectedFyStartYear,
       selectedLabel: formatFinancialYearLabel(selectedFyStartYear),
@@ -314,10 +363,25 @@ export async function getDashboardData(monthKey?: string, fyStartYear?: string) 
 
 export async function exportAllData() {
   const user = await requireUser();
-  const [incomes, expenses, fields] = await Promise.all([
+  const [incomes, expenses, fields, goldHolding, goldTransactions, silverHolding, silverTransactions, houseProfile, houseExpenses] = await Promise.all([
     prisma.incomeSource.findMany({ where: { userId: user.id } }),
     prisma.expense.findMany({ where: { userId: user.id }, orderBy: { date: "asc" } }),
     prisma.customFieldDef.findMany({ where: { userId: user.id } }),
+    prisma.metalHolding.findUnique({ where: { userId_type: { userId: user.id, type: "gold" } } }),
+    prisma.metalTransaction.findMany({ where: { userId: user.id, type: "gold" }, orderBy: { date: "asc" } }),
+    prisma.metalHolding.findUnique({ where: { userId_type: { userId: user.id, type: "silver" } } }),
+    prisma.metalTransaction.findMany({ where: { userId: user.id, type: "silver" }, orderBy: { date: "asc" } }),
+    prisma.houseProfile.findFirst({ where: { userId: user.id }, orderBy: { createdAt: "asc" } }),
+    prisma.houseExpense.findMany({ where: { userId: user.id }, orderBy: { date: "asc" } }),
   ]);
-  return { email: user.email, incomes, expenses, fields, exportedAt: new Date().toISOString() };
+  return { 
+    email: user.email, 
+    incomes, 
+    expenses, 
+    fields,
+    gold: { holding: goldHolding, transactions: goldTransactions },
+    silver: { holding: silverHolding, transactions: silverTransactions },
+    house: { profile: houseProfile, expenses: houseExpenses },
+    exportedAt: new Date().toISOString() 
+  };
 }

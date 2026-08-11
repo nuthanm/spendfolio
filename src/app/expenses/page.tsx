@@ -214,12 +214,13 @@ export default function ExpensesPage() {
               {form.label === "Other" ? (
                 <label className="block">
                   <span className="mb-1.5 block font-mono text-[11px] uppercase tracking-wider text-ink-soft">
-                    Defined name
+                    Category name
                   </span>
                   <input
-                    className="field"
+                    className="field border-mint/50 bg-mint/5"
                     required
-                    placeholder="e.g. Domain for 1 year"
+                    autoFocus
+                    placeholder="e.g. Domain renewal, Software license, etc."
                     value={form.customLabel}
                     onChange={(e) =>
                       setForm((f) => ({ ...f, customLabel: e.target.value }))

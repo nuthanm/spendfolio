@@ -181,6 +181,35 @@ export default function DashboardClient() {
         </div>
       </section>
 
+      {data.house.currentMonthExpenses > 0 || data.house.totalExpenses > 0 || data.house.loanInfo.sanctioned > 0 ? (
+        <section className="mt-6 grid gap-4 md:grid-cols-4 anim-rise-delay-1">
+          {data.house.currentMonthExpenses > 0 ? (
+            <Stat label="House (Current Month)" value={data.house.currentMonthExpenses} note="this month" />
+          ) : null}
+          {data.house.totalExpenses > 0 ? (
+            <Stat label="House (Total)" value={data.house.totalExpenses} note="all months" />
+          ) : null}
+          {data.house.loanInfo.sanctioned > 0 ? (
+            <div className="border border-line bg-white/50 p-5">
+              <p className="font-mono text-[11px] uppercase tracking-wider text-ink-soft">Loan Outstanding</p>
+              <p className="mt-3 font-mono text-sm text-ink">
+                {formatINR(data.house.loanInfo.outstanding)} / {formatINR(data.house.loanInfo.sanctioned)}
+              </p>
+              <p className="mt-1 text-xs text-ink-soft">{data.house.loanInfo.percentagePending}% pending</p>
+            </div>
+          ) : null}
+          {data.house.loanInfo.emorTotal > 0 ? (
+            <div className="border border-line bg-white/50 p-5">
+              <p className="font-mono text-[11px] uppercase tracking-wider text-ink-soft">EMI Remaining</p>
+              <p className="mt-3 font-mono text-sm text-ink">
+                {data.house.loanInfo.emorOutstanding} / {data.house.loanInfo.emorTotal}
+              </p>
+              <p className="mt-1 text-xs text-ink-soft">months</p>
+            </div>
+          ) : null}
+        </section>
+      ) : null}
+
       <section className="mt-10 anim-rise-delay-1">
         <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
           <h2 className="text-xl font-bold text-ink">{data.financialYear.selectedLabel} summary</h2>

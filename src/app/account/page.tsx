@@ -39,21 +39,77 @@ export default function AccountPage() {
       const data = await exportAllData();
       if (format === "json") {
         const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
-        triggerDownload(blob, `spendfolio-export-${Date.now()}.json`);
-        setMessage("JSON export downloaded.");
+        triggerDownload(blob, `spendfolio-complete-export-${Date.now()}.json`);
+        setMessage("Complete export downloaded (expenses, income, gold, silver, house, and custom fields).");
         return;
       }
 
-      const lines = [
-        "date,label,amount,remarks,renewalDate",
+      // CSV export with multiple sections
+      const lines: string[] = [];
+      
+      // Expenses section
+      lines.push("=== EXPENSES ===");
+      lines.push("date,label,amount,remarks,renewalDate");
+      lines.push(
         ...data.expenses.map(
           (e) =>
             `${e.date},${JSON.stringify(e.label)},${e.amount},${JSON.stringify(e.remarks)},${e.renewalDate || ""}`,
         ),
-      ];
+      );
+      
+      // Income section
+      lines.push("");
+      lines.push("=== INCOME SOURCES ===");
+      lines.push("source,amount,recurring,createdAt");
+      lines.push(
+        ...data.incomes.map(
+          (i) =>
+            `${JSON.stringify(i.name)},${i.amount},${i.recurring},${i.createdAt.substring(0, 10)}`,
+        ),
+      );
+      
+      // House section
+      if (data.house.expenses.length > 0) {
+        lines.push("");
+        lines.push("=== HOUSE EXPENSES ===");
+        lines.push("date,category,amount,recurring,note");
+        lines.push(
+          ...data.house.expenses.map(
+            (e) =>
+              `${e.date},${JSON.stringify(e.category)},${e.amount},${e.recurring},${JSON.stringify(e.note)}`,
+          ),
+        );
+      }
+      
+      // Gold section
+      if (data.gold.transactions.length > 0) {
+        lines.push("");
+        lines.push("=== GOLD TRANSACTIONS ===");
+        lines.push("date,type,grams,rate,amount");
+        lines.push(
+          ...data.gold.transactions.map(
+            (t) =>
+              `${t.date},${t.transactionType},${t.grams},${t.rate},${t.totalCost}`,
+          ),
+        );
+      }
+      
+      // Silver section
+      if (data.silver.transactions.length > 0) {
+        lines.push("");
+        lines.push("=== SILVER TRANSACTIONS ===");
+        lines.push("date,type,grams,rate,amount");
+        lines.push(
+          ...data.silver.transactions.map(
+            (t) =>
+              `${t.date},${t.transactionType},${t.grams},${t.rate},${t.totalCost}`,
+          ),
+        );
+      }
+
       const blob = new Blob([lines.join("\n")], { type: "text/csv" });
-      triggerDownload(blob, `spendfolio-expenses-${Date.now()}.csv`);
-      setMessage("CSV export downloaded.");
+      triggerDownload(blob, `spendfolio-complete-export-${Date.now()}.csv`);
+      setMessage("Complete export downloaded (includes expenses, income, gold, silver, and house data).");
     });
   }
 
