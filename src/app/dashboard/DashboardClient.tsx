@@ -646,10 +646,12 @@ function Stat({
   note: string;
   accent?: boolean;
 }) {
+  const valueTone = accent ? (value < 0 ? "text-coral" : "text-mint") : "text-ink";
+
   return (
     <div className="border border-line bg-white/50 p-5">
       <p className="font-mono text-[11px] uppercase tracking-wider text-ink-soft">{label}</p>
-      <p className={`mt-3 text-3xl font-bold number-tick ${accent ? "text-mint" : "text-ink"}`}>
+      <p className={`mt-3 text-3xl font-bold number-tick ${valueTone}`}>
         <AnimatedNumber value={value} format={(n) => formatINR(n)} />
       </p>
       <p className="mt-2 font-mono text-xs text-ink-soft">{note}</p>
