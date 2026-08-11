@@ -64,7 +64,7 @@ export default function AccountPage() {
       lines.push(
         ...data.incomes.map(
           (i) =>
-            `${JSON.stringify(i.name)},${i.amount},${i.recurring},${i.createdAt.substring(0, 10)}`,
+            `${JSON.stringify(i.name)},${i.amount},${i.recurring},${new Date(i.createdAt).toISOString().substring(0, 10)}`,
         ),
       );
       
