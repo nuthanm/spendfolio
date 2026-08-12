@@ -53,6 +53,8 @@ type ContactFormState = {
   notes: string;
 };
 
+type HouseTab = "profile" | "expenses" | "contacts";
+
 function toInput(value: number | null) {
   return value === null ? "" : String(value);
 }
@@ -99,6 +101,11 @@ const emptyContactForm: ContactFormState = {
 export function HousePageClient({ initialData }: { initialData: HouseTrackerData }) {
   const [data, setData] = useState(initialData);
   const categories = useMemo(() => [...HOUSE_EXPENSE_CATEGORIES], []);
+  const now = new Date();
+  const currentYear = now.getFullYear();
+  const currentMonth = String(now.getMonth() + 1).padStart(2, "0");
+
+  const [activeTab, setActiveTab] = useState<HouseTab>("expenses");
   const [profileForm, setProfileForm] = useState<ProfileFormState>(() =>
     profileFormFromData(initialData),
   );
@@ -108,11 +115,38 @@ export function HousePageClient({ initialData }: { initialData: HouseTrackerData
   const [contactForm, setContactForm] = useState<ContactFormState>(emptyContactForm);
   const [editingExpenseId, setEditingExpenseId] = useState<string | null>(null);
   const [editingContactId, setEditingContactId] = useState<string | null>(null);
+  const [selectedExpenseCategory, setSelectedExpenseCategory] = useState<string>("All");
+  const [selectedYear, setSelectedYear] = useState<string>(String(currentYear));
+  const [selectedMonth, setSelectedMonth] = useState<string>(currentMonth);
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
-  const recentEntries = useMemo(() => data.expenses.slice(0, 24), [data.expenses]);
+  const availableYears = useMemo(() => {
+    const years = new Set<number>([currentYear, currentYear - 1]);
+    for (const expense of data.expenses) {
+      const year = Number(expense.date.slice(0, 4));
+      if (Number.isFinite(year)) {
+        years.add(year);
+      }
+    }
+    return [...years].sort((a, b) => b - a);
+  }, [currentYear, data.expenses]);
+
+  const filteredEntries = useMemo(() => {
+    const monthKey = `${selectedYear}-${selectedMonth}`;
+    return data.expenses.filter((row) => {
+      const matchesCategory =
+        selectedExpenseCategory === "All" || row.category === selectedExpenseCategory;
+      const matchesMonth = row.date.startsWith(monthKey);
+      return matchesCategory && matchesMonth;
+    });
+  }, [data.expenses, selectedExpenseCategory, selectedYear, selectedMonth]);
+
+  const filteredTotal = useMemo(
+    () => filteredEntries.reduce((sum, row) => sum + row.amount, 0),
+    [filteredEntries],
+  );
 
   function flashSuccess(message: string) {
     setSuccess(message);
@@ -266,6 +300,8 @@ export function HousePageClient({ initialData }: { initialData: HouseTrackerData
     });
   }
 
+  const monthFilterKey = `${selectedYear}-${selectedMonth}`;
+
   return (
     <div className="space-y-8 anim-rise">
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -293,7 +329,45 @@ export function HousePageClient({ initialData }: { initialData: HouseTrackerData
       {error ? <div className="border border-coral/50 bg-red-100/70 px-3 py-2 text-sm text-red-700">{error}</div> : null}
       {success ? <div className="border border-mint/40 bg-green-100/60 px-3 py-2 text-sm text-mint">{success}</div> : null}
 
-      <div className="grid gap-6 xl:grid-cols-[1.2fr_1fr]">
+      <section className="sticky top-2 z-20 border border-line bg-white/75 p-2 backdrop-blur-sm">
+        <div className="grid gap-2 sm:grid-cols-3">
+          <button
+            type="button"
+            className={`px-3 py-2 text-sm font-medium transition ${
+              activeTab === "expenses"
+                ? "bg-white text-ink shadow-sm"
+                : "bg-transparent text-ink-soft hover:bg-white/70 hover:text-ink"
+            }`}
+            onClick={() => setActiveTab("expenses")}
+          >
+            Expenses + logs
+          </button>
+          <button
+            type="button"
+            className={`px-3 py-2 text-sm font-medium transition ${
+              activeTab === "profile"
+                ? "bg-white text-ink shadow-sm"
+                : "bg-transparent text-ink-soft hover:bg-white/70 hover:text-ink"
+            }`}
+            onClick={() => setActiveTab("profile")}
+          >
+            Profile + loan tracker
+          </button>
+          <button
+            type="button"
+            className={`px-3 py-2 text-sm font-medium transition ${
+              activeTab === "contacts"
+                ? "bg-white text-ink shadow-sm"
+                : "bg-transparent text-ink-soft hover:bg-white/70 hover:text-ink"
+            }`}
+            onClick={() => setActiveTab("contacts")}
+          >
+            Contacts
+          </button>
+        </div>
+      </section>
+
+      {activeTab === "profile" ? (
         <section className="border border-line bg-white/50 p-5">
           <h2 className="text-lg font-bold text-ink">House profile and loan tracker</h2>
           <p className="mt-1 text-sm text-ink-soft">
@@ -350,143 +424,210 @@ export function HousePageClient({ initialData }: { initialData: HouseTrackerData
             </button>
           </form>
         </section>
+      ) : null}
 
-        <section className="border border-line bg-white/50 p-5">
-          <h2 className="text-lg font-bold text-ink">
-            {editingExpenseId ? "Edit house entry" : "Add house expense entry"}
-          </h2>
-          <p className="mt-1 text-sm text-ink-soft">
-            Use this for interiors, maintenance, maid, house purchases, housewarming, and all home spend.
-          </p>
+      {activeTab === "expenses" ? (
+        <section className="space-y-6">
+          <section className="border border-line bg-white/50 p-5">
+            <h2 className="text-lg font-bold text-ink">
+              {editingExpenseId ? "Edit house entry" : "Add house expense entry"}
+            </h2>
+            <p className="mt-1 text-sm text-ink-soft">
+              Use this for interiors, maintenance, maid, house purchases, housewarming, and all home spend.
+            </p>
 
-          <form onSubmit={onSaveExpense} className="mt-4 space-y-3">
-            <label className="block">
-              <span className="mb-1 block text-xs text-ink-soft">Date</span>
-              <input
-                type="date"
-                className="field"
-                required
-                value={expenseForm.date}
-                onChange={(e) => setExpenseForm((s) => ({ ...s, date: e.target.value }))}
-              />
-            </label>
+            <form onSubmit={onSaveExpense} className="mt-4 grid gap-3 lg:grid-cols-2">
+              <label className="block">
+                <span className="mb-1 block text-xs text-ink-soft">Date</span>
+                <input
+                  type="date"
+                  className="field"
+                  required
+                  value={expenseForm.date}
+                  onChange={(e) => setExpenseForm((s) => ({ ...s, date: e.target.value }))}
+                />
+              </label>
 
-            <label className="block">
-              <span className="mb-1 block text-xs text-ink-soft">Category</span>
-              <select
-                className="field"
-                value={expenseForm.category}
-                onChange={(e) => setExpenseForm((s) => ({ ...s, category: e.target.value }))}
-              >
-                {categories.map((category) => (
-                  <option key={category} value={category}>
-                    {category}
-                  </option>
-                ))}
-              </select>
-            </label>
-
-            <label className="block">
-              <span className="mb-1 block text-xs text-ink-soft">Amount</span>
-              <input
-                className="field"
-                type="number"
-                step="any"
-                required
-                value={expenseForm.amount}
-                onChange={(e) => setExpenseForm((s) => ({ ...s, amount: e.target.value }))}
-              />
-            </label>
-
-            <label className="flex items-center gap-2 border border-line px-3 py-2 text-sm text-ink">
-              <input
-                type="checkbox"
-                checked={expenseForm.recurring}
-                onChange={(e) => setExpenseForm((s) => ({ ...s, recurring: e.target.checked }))}
-              />
-              Recurring monthly expense
-            </label>
-
-            <label className="block">
-              <span className="mb-1 block text-xs text-ink-soft">Notes</span>
-              <textarea
-                className="field min-h-20"
-                value={expenseForm.note}
-                onChange={(e) => setExpenseForm((s) => ({ ...s, note: e.target.value }))}
-              />
-            </label>
-
-            <div className="flex flex-wrap gap-2">
-              <button disabled={pending} className="btn-primary px-4 py-2 text-sm" type="submit">
-                {pending ? "Saving..." : editingExpenseId ? "Update entry" : "Add entry"}
-              </button>
-              {editingExpenseId ? (
-                <button
-                  type="button"
-                  className="btn-secondary px-4 py-2 text-sm"
-                  onClick={() => {
-                    setEditingExpenseId(null);
-                    setExpenseForm(emptyExpenseForm(categories));
-                  }}
+              <label className="block">
+                <span className="mb-1 block text-xs text-ink-soft">Category</span>
+                <select
+                  className="field"
+                  value={expenseForm.category}
+                  onChange={(e) => setExpenseForm((s) => ({ ...s, category: e.target.value }))}
                 >
-                  Cancel edit
+                  {categories.map((category) => (
+                    <option key={category} value={category}>
+                      {category}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <label className="block">
+                <span className="mb-1 block text-xs text-ink-soft">Amount</span>
+                <input
+                  className="field"
+                  type="number"
+                  step="any"
+                  required
+                  value={expenseForm.amount}
+                  onChange={(e) => setExpenseForm((s) => ({ ...s, amount: e.target.value }))}
+                />
+              </label>
+
+              <label className="block lg:col-span-2">
+                <span className="mb-1 block text-xs text-ink-soft">Notes</span>
+                <textarea
+                  className="field min-h-20"
+                  value={expenseForm.note}
+                  onChange={(e) => setExpenseForm((s) => ({ ...s, note: e.target.value }))}
+                />
+              </label>
+
+              <label className="flex items-center gap-2 border border-line px-3 py-2 text-sm text-ink lg:col-span-2">
+                <input
+                  type="checkbox"
+                  checked={expenseForm.recurring}
+                  onChange={(e) => setExpenseForm((s) => ({ ...s, recurring: e.target.checked }))}
+                />
+                Recurring monthly expense
+              </label>
+
+              <div className="flex flex-wrap gap-2 lg:col-span-2">
+                <button disabled={pending} className="btn-primary px-4 py-2 text-sm" type="submit">
+                  {pending ? "Saving..." : editingExpenseId ? "Update entry" : "Add entry"}
                 </button>
-              ) : null}
-            </div>
-          </form>
-        </section>
-      </div>
-
-      <section className="border border-line bg-white/50 p-5">
-        <h2 className="text-lg font-bold text-ink">Month-wise spending summary</h2>
-        {data.totals.monthlyBreakdown.length === 0 ? (
-          <p className="mt-3 text-sm text-ink-soft">No entries yet.</p>
-        ) : (
-          <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            {data.totals.monthlyBreakdown.slice(0, 8).map((row) => (
-              <div key={row.monthKey} className="border border-line/70 bg-white/40 p-3">
-                <p className="font-mono text-xs text-ink-soft">{formatMonthLabel(row.monthKey)}</p>
-                <p className="mt-1 text-lg font-bold text-ink">{formatINR(row.total)}</p>
+                {editingExpenseId ? (
+                  <button
+                    type="button"
+                    className="btn-secondary px-4 py-2 text-sm"
+                    onClick={() => {
+                      setEditingExpenseId(null);
+                      setExpenseForm(emptyExpenseForm(categories));
+                    }}
+                  >
+                    Cancel edit
+                  </button>
+                ) : null}
               </div>
-            ))}
-          </div>
-        )}
-      </section>
+            </form>
+          </section>
 
-      <section className="grid gap-6 xl:grid-cols-2">
-        <div className="border border-line bg-white/50 p-5">
-          <h2 className="text-lg font-bold text-ink">House expense log</h2>
-          {recentEntries.length === 0 ? (
-            <p className="mt-3 text-sm text-ink-soft">No house entries yet.</p>
-          ) : (
-            <div className="mt-3 space-y-2">
-              {recentEntries.map((row) => (
-                <div key={row.id} className="flex items-start justify-between gap-3 border border-line/70 bg-white/40 p-3">
-                  <div>
-                    <p className="font-medium text-ink">{row.category}</p>
-                    <p className="font-mono text-xs text-ink-soft">
-                      {row.date} {row.recurring ? "· recurring" : ""}
-                    </p>
-                    {row.note ? <p className="mt-1 text-sm text-ink-soft">{row.note}</p> : null}
-                  </div>
-                  <div className="text-right">
-                    <p className="font-semibold text-ink">{formatINR(row.amount)}</p>
-                    <div className="mt-1 flex justify-end gap-2 text-xs">
-                      <button className="text-ink-soft hover:text-ink" onClick={() => onEditExpense(row)}>
-                        edit
-                      </button>
-                      <button className="text-coral hover:underline" onClick={() => onDeleteExpense(row.id)}>
-                        delete
-                      </button>
+          <section className="border border-line bg-white/50 p-5">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <h2 className="text-lg font-bold text-ink">House expense log</h2>
+              <p className="text-sm text-ink-soft">
+                Showing {selectedExpenseCategory} for {formatMonthLabel(monthFilterKey)}
+              </p>
+            </div>
+
+            <div className="mt-4">
+              <p className="mb-2 text-xs text-ink-soft">Category tabs</p>
+              <div className="-mx-1 overflow-x-auto px-1 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
+                <div className="flex min-w-max gap-2">
+                {["All", ...categories].map((category) => (
+                  <button
+                    key={category}
+                    type="button"
+                    className={`px-3 py-1.5 text-xs font-medium transition ${
+                      selectedExpenseCategory === category
+                        ? "bg-ink text-white"
+                        : "border border-line bg-white/70 text-ink-soft hover:text-ink"
+                    }`}
+                    onClick={() => setSelectedExpenseCategory(category)}
+                  >
+                    {category}
+                  </button>
+                ))}
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-3 grid gap-3 md:grid-cols-2">
+              <label className="block">
+                <span className="mb-1 block text-xs text-ink-soft">Year</span>
+                <select className="field" value={selectedYear} onChange={(e) => setSelectedYear(e.target.value)}>
+                  {availableYears.map((year) => (
+                    <option key={year} value={String(year)}>
+                      {year}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <label className="block">
+                <span className="mb-1 block text-xs text-ink-soft">Month</span>
+                <select className="field" value={selectedMonth} onChange={(e) => setSelectedMonth(e.target.value)}>
+                  {MONTH_OPTIONS.map((month) => (
+                    <option key={month.value} value={month.value}>
+                      {month.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+
+            <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              <div className="border border-line/70 bg-white/40 p-3">
+                <p className="font-mono text-xs text-ink-soft">Filtered month spend</p>
+                <p className="mt-1 text-lg font-bold text-ink">{formatINR(filteredTotal)}</p>
+              </div>
+              <div className="border border-line/70 bg-white/40 p-3">
+                <p className="font-mono text-xs text-ink-soft">Entries in view</p>
+                <p className="mt-1 text-lg font-bold text-ink">{filteredEntries.length}</p>
+              </div>
+            </div>
+
+            {filteredEntries.length === 0 ? (
+              <p className="mt-4 text-sm text-ink-soft">No house entries found for this month/category.</p>
+            ) : (
+              <div className="mt-4 space-y-2">
+                {filteredEntries.map((row) => (
+                  <div key={row.id} className="flex items-start justify-between gap-3 border border-line/70 bg-white/40 p-3">
+                    <div>
+                      <p className="font-medium text-ink">{row.category}</p>
+                      <p className="font-mono text-xs text-ink-soft">
+                        {row.date} {row.recurring ? "· recurring" : ""}
+                      </p>
+                      {row.note ? <p className="mt-1 text-sm text-ink-soft">{row.note}</p> : null}
+                    </div>
+                    <div className="text-right">
+                      <p className="font-semibold text-ink">{formatINR(row.amount)}</p>
+                      <div className="mt-1 flex justify-end gap-2 text-xs">
+                        <button className="text-ink-soft hover:text-ink" onClick={() => onEditExpense(row)}>
+                          edit
+                        </button>
+                        <button className="text-coral hover:underline" onClick={() => onDeleteExpense(row.id)}>
+                          delete
+                        </button>
+                      </div>
                     </div>
                   </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
+                ))}
+              </div>
+            )}
+          </section>
 
-        <div className="border border-line bg-white/50 p-5">
+          <section className="border border-line bg-white/50 p-5">
+            <h2 className="text-lg font-bold text-ink">Month-wise spending summary</h2>
+            {data.totals.monthlyBreakdown.length === 0 ? (
+              <p className="mt-3 text-sm text-ink-soft">No entries yet.</p>
+            ) : (
+              <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                {data.totals.monthlyBreakdown.slice(0, 8).map((row) => (
+                  <div key={row.monthKey} className="border border-line/70 bg-white/40 p-3">
+                    <p className="font-mono text-xs text-ink-soft">{formatMonthLabel(row.monthKey)}</p>
+                    <p className="mt-1 text-lg font-bold text-ink">{formatINR(row.total)}</p>
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
+        </section>
+      ) : null}
+
+      {activeTab === "contacts" ? (
+        <section className="border border-line bg-white/50 p-5">
           <h2 className="text-lg font-bold text-ink">
             {editingContactId ? "Edit contact" : "Contacts (Icare / IFM / Help Desk)"}
           </h2>
@@ -584,11 +725,26 @@ export function HousePageClient({ initialData }: { initialData: HouseTrackerData
           ) : (
             <p className="mt-4 text-sm text-ink-soft">No contacts added yet.</p>
           )}
-        </div>
-      </section>
+        </section>
+      ) : null}
     </div>
   );
 }
+
+const MONTH_OPTIONS = [
+  { value: "01", label: "January" },
+  { value: "02", label: "February" },
+  { value: "03", label: "March" },
+  { value: "04", label: "April" },
+  { value: "05", label: "May" },
+  { value: "06", label: "June" },
+  { value: "07", label: "July" },
+  { value: "08", label: "August" },
+  { value: "09", label: "September" },
+  { value: "10", label: "October" },
+  { value: "11", label: "November" },
+  { value: "12", label: "December" },
+];
 
 function NumberField({
   label,
