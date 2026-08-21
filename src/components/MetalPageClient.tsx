@@ -13,6 +13,17 @@ import {
   type MetalType,
 } from "@/lib/actions/metal";
 
+type MetalPurchaseFormDetails = {
+  itemType: "coin" | "ornament";
+  purity: "24k" | "22k" | "18k";
+  quantity: string;
+  grams: string;
+  rate: string;
+  makingCharge: string;
+  gstType: "igst" | "sgst";
+  discountPercent: string;
+};
+
 export function MetalPageClient({
   metalType,
   initialHolding,
@@ -26,14 +37,14 @@ export function MetalPageClient({
   const [transactions, setTransactions] = useState(initialTransactions);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [buyDetails, setBuyDetails] = useState({
-    itemType: "ornament" as const,
-    purity: "24k" as const,
+  const [buyDetails, setBuyDetails] = useState<MetalPurchaseFormDetails>({
+    itemType: "ornament",
+    purity: "24k",
     quantity: "1",
     grams: "",
     rate: "",
     makingCharge: "",
-    gstType: "sgst" as const,
+    gstType: "sgst",
     discountPercent: "",
   });
 
