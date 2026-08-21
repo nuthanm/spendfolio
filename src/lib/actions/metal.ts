@@ -24,9 +24,26 @@ export interface MetalTransactionData {
   type: "buy" | "sell";
   grams: number;
   ratePerGram: number;
+  itemType: "coin" | "ornament";
+  purity: "24k" | "22k" | "18k";
+  quantity: number;
+  goldValue: number;
+  makingCharge: number;
+  gstType: "igst" | "sgst";
+  gstAmount: number;
+  discountPercent: number;
   totalAmount: number;
   note: string;
   realizedPL: number | null;
+}
+
+export interface MetalPurchaseDetails {
+  itemType: "coin" | "ornament";
+  purity: "24k" | "22k" | "18k";
+  quantity: number;
+  makingCharge: number;
+  gstType: "igst" | "sgst";
+  discountPercent: number;
 }
 
 type MetalActionResult =
@@ -136,6 +153,14 @@ export async function getMetalTransactions(metalType: MetalType): Promise<MetalT
     type: tx.type as "buy" | "sell",
     grams: tx.grams,
     ratePerGram: tx.ratePerGram,
+    itemType: tx.itemType as "coin" | "ornament",
+    purity: tx.purity as "24k" | "22k" | "18k",
+    quantity: tx.quantity,
+    goldValue: tx.goldValue,
+    makingCharge: tx.makingCharge,
+    gstType: tx.gstType as "igst" | "sgst",
+    gstAmount: tx.gstAmount,
+    discountPercent: tx.discountPercent,
     totalAmount: tx.totalAmount,
     note: tx.note,
     realizedPL: tx.realizedPL,
@@ -148,14 +173,31 @@ export async function buyMetal(
   grams: number,
   ratePerGram: number,
   note: string,
+  details: MetalPurchaseDetails,
 ): Promise<MetalActionResult> {
   const user = await requireUser();
 
-  if (grams <= 0 || ratePerGram <= 0) {
+  if (!Number.isFinite(grams) || !Number.isFinite(ratePerGram) || grams <= 0 || ratePerGram <= 0) {
     return { error: "Grams and rate must be positive" };
   }
 
-  const totalAmount = grams * ratePerGram;
+  if (!Number.isInteger(details.quantity) || details.quantity <= 0) {
+    return { error: "Quantity must be a positive whole number" };
+  }
+
+  if (
+    !Number.isFinite(details.makingCharge) ||
+    !Number.isFinite(details.discountPercent) ||
+    details.makingCharge < 0 ||
+    details.discountPercent < 0 ||
+    details.discountPercent > 100
+  ) {
+    return { error: "Making charge must be positive and discount must be between 0% and 100%" };
+  }
+
+  const goldValue = grams * ratePerGram;
+  const gstAmount = (goldValue + details.makingCharge) * 0.03;
+  const totalAmount = (goldValue + details.makingCharge + gstAmount) * (1 - details.discountPercent / 100);
 
   await prisma.metalTransaction.create({
     data: {
@@ -165,6 +207,14 @@ export async function buyMetal(
       date,
       grams,
       ratePerGram,
+      itemType: details.itemType,
+      purity: details.purity,
+      quantity: details.quantity,
+      goldValue,
+      makingCharge: details.makingCharge,
+      gstType: details.gstType,
+      gstAmount,
+      discountPercent: details.discountPercent,
       totalAmount,
       note,
     },

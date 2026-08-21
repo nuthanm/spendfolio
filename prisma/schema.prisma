@@ -115,6 +115,14 @@ model MetalTransaction {
   date        String
   grams       Float
   ratePerGram Float
+  itemType    String   @default("ornament") // coin | ornament
+  purity      String   @default("24k") // 24k | 22k | 18k
+  quantity    Int      @default(1)
+  goldValue   Float    @default(0)
+  makingCharge Float   @default(0)
+  gstType     String   @default("sgst") // igst | sgst
+  gstAmount   Float    @default(0)
+  discountPercent Float @default(0)
   totalAmount Float
   note        String   @default("")
   realizedPL  Float?

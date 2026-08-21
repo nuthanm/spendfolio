@@ -26,6 +26,16 @@ export function MetalPageClient({
   const [transactions, setTransactions] = useState(initialTransactions);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [buyDetails, setBuyDetails] = useState({
+    itemType: "ornament" as const,
+    purity: "24k" as const,
+    quantity: "1",
+    grams: "",
+    rate: "",
+    makingCharge: "",
+    gstType: "sgst" as const,
+    discountPercent: "",
+  });
 
   // Tabs: overview, add-transaction, set-goal
   const [tab, setTab] = useState<"overview" | "buy" | "sell" | "goal" | "rate">("overview");
@@ -43,6 +53,12 @@ export function MetalPageClient({
   };
 
   const capitalLabel = metalType === "gold" ? "Gold" : "Silver";
+  const metalValueLabel = `${capitalLabel} Value`;
+  const goldValue = (Number.parseFloat(buyDetails.grams) || 0) * (Number.parseFloat(buyDetails.rate) || 0);
+  const makingCharge = Number.parseFloat(buyDetails.makingCharge) || 0;
+  const gstAmount = (goldValue + makingCharge) * 0.03;
+  const discountPercent = Number.parseFloat(buyDetails.discountPercent) || 0;
+  const discountedValue = (goldValue + makingCharge + gstAmount) * (1 - discountPercent / 100);
 
   // Buy handler
   const handleBuy = async (formData: FormData) => {
@@ -52,8 +68,16 @@ export function MetalPageClient({
     const grams = parseFloat(formData.get("grams") as string);
     const rate = parseFloat(formData.get("rate") as string);
     const note = formData.get("note") as string;
+    const details = {
+      itemType: formData.get("itemType") as "coin" | "ornament",
+      purity: formData.get("purity") as "24k" | "22k" | "18k",
+      quantity: parseInt(formData.get("quantity") as string, 10),
+      makingCharge: parseFloat(formData.get("makingCharge") as string) || 0,
+      gstType: formData.get("gstType") as "igst" | "sgst",
+      discountPercent: parseFloat(formData.get("discountPercent") as string) || 0,
+    };
 
-    const result = await buyMetal(metalType, date, grams, rate, note);
+    const result = await buyMetal(metalType, date, grams, rate, note, details);
     if ("error" in result) {
       setError(result.error);
     } else {
@@ -71,7 +95,15 @@ export function MetalPageClient({
           type: "buy",
           grams,
           ratePerGram: rate,
-          totalAmount: grams * rate,
+          itemType: details.itemType,
+          purity: details.purity,
+          quantity: details.quantity,
+          goldValue,
+          makingCharge: details.makingCharge,
+          gstType: details.gstType,
+          gstAmount: (goldValue + details.makingCharge) * 0.03,
+          discountPercent: details.discountPercent,
+          totalAmount: discountedValue,
           note,
           realizedPL: null,
         },
@@ -111,6 +143,14 @@ export function MetalPageClient({
           type: "sell",
           grams,
           ratePerGram: rate,
+          itemType: "ornament",
+          purity: "24k",
+          quantity: 1,
+          goldValue: grams * rate,
+          makingCharge: 0,
+          gstType: "sgst",
+          gstAmount: 0,
+          discountPercent: 0,
           totalAmount,
           note,
           realizedPL,
@@ -321,6 +361,12 @@ export function MetalPageClient({
                         {tx.note && (
                           <div className="mt-1 text-xs text-ink-soft">{tx.note}</div>
                         )}
+                        {tx.type === "buy" && (
+                          <div className="mt-1 text-xs text-ink-soft">
+                            {tx.quantity} {tx.itemType} {tx.purity.toUpperCase()} | {metalValueLabel}: {formatCurrency(tx.goldValue)} | {tx.gstType.toUpperCase()} GST: {formatCurrency(tx.gstAmount)}
+                            {tx.discountPercent > 0 && ` | Discount: ${tx.discountPercent}%`}
+                          </div>
+                        )}
                         {tx.realizedPL !== null && (
                           <div className={`mt-1 text-xs font-medium ${plColor(tx.realizedPL)}`}>
                             {plIcon(tx.realizedPL)} P&L: {formatCurrency(Math.abs(tx.realizedPL))}
@@ -352,7 +398,7 @@ export function MetalPageClient({
         {tab === "buy" && (
           <form action={handleBuy} className="space-y-3">
             <div>
-              <label className="block text-xs font-medium text-ink-soft mb-1">Date</label>
+              <label className="block text-xs font-medium text-ink-soft mb-1">Purchase Date</label>
               <input
                 type="date"
                 name="date"
@@ -363,6 +409,50 @@ export function MetalPageClient({
             </div>
             <div className="grid gap-3 sm:grid-cols-2">
               <div>
+                <label className="block text-xs font-medium text-ink-soft mb-1">Item Type</label>
+                <select
+                  name="itemType"
+                  value={buyDetails.itemType}
+                  onChange={(event) => setBuyDetails((current) => ({
+                    ...current,
+                    itemType: event.target.value as "coin" | "ornament",
+                  }))}
+                  className="w-full rounded border border-line/60 bg-white/40 px-3 py-2 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-amber-400/50"
+                >
+                  <option value="coin">Coin</option>
+                  <option value="ornament">Ornament</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-ink-soft mb-1">Purity</label>
+                <select
+                  name="purity"
+                  value={buyDetails.purity}
+                  onChange={(event) => setBuyDetails((current) => ({
+                    ...current,
+                    purity: event.target.value as "24k" | "22k" | "18k",
+                  }))}
+                  className="w-full rounded border border-line/60 bg-white/40 px-3 py-2 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-amber-400/50"
+                >
+                  <option value="24k">24K</option>
+                  <option value="22k">22K</option>
+                  <option value="18k">18K</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-ink-soft mb-1">Quantity</label>
+                <input
+                  type="number"
+                  name="quantity"
+                  min="1"
+                  step="1"
+                  required
+                  value={buyDetails.quantity}
+                  onChange={(event) => setBuyDetails((current) => ({ ...current, quantity: event.target.value }))}
+                  className="w-full rounded border border-line/60 bg-white/40 px-3 py-2 text-sm text-ink placeholder:text-ink-soft focus:outline-none focus:ring-2 focus:ring-amber-400/50"
+                />
+              </div>
+              <div>
                 <label className="block text-xs font-medium text-ink-soft mb-1">Grams</label>
                 <input
                   type="number"
@@ -370,6 +460,8 @@ export function MetalPageClient({
                   step="any"
                   placeholder="10.5"
                   required
+                  value={buyDetails.grams}
+                  onChange={(event) => setBuyDetails((current) => ({ ...current, grams: event.target.value }))}
                   className="w-full rounded border border-line/60 bg-white/40 px-3 py-2 text-sm text-ink placeholder:text-ink-soft focus:outline-none focus:ring-2 focus:ring-amber-400/50"
                 />
               </div>
@@ -383,9 +475,68 @@ export function MetalPageClient({
                   step="any"
                   placeholder="5000"
                   required
+                  value={buyDetails.rate}
+                  onChange={(event) => setBuyDetails((current) => ({ ...current, rate: event.target.value }))}
                   className="w-full rounded border border-line/60 bg-white/40 px-3 py-2 text-sm text-ink placeholder:text-ink-soft focus:outline-none focus:ring-2 focus:ring-amber-400/50"
                 />
               </div>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div>
+                <label className="block text-xs font-medium text-ink-soft mb-1">{metalValueLabel}</label>
+                <input
+                  type="text"
+                  value={formatCurrency(goldValue)}
+                  readOnly
+                  className="w-full rounded border border-line/60 bg-line/10 px-3 py-2 text-sm text-ink"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-ink-soft mb-1">Making Charge</label>
+                <input
+                  type="number"
+                  name="makingCharge"
+                  min="0"
+                  step="any"
+                  placeholder="0"
+                  value={buyDetails.makingCharge}
+                  onChange={(event) => setBuyDetails((current) => ({ ...current, makingCharge: event.target.value }))}
+                  className="w-full rounded border border-line/60 bg-white/40 px-3 py-2 text-sm text-ink placeholder:text-ink-soft focus:outline-none focus:ring-2 focus:ring-amber-400/50"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-ink-soft mb-1">GST</label>
+                <select
+                  name="gstType"
+                  value={buyDetails.gstType}
+                  onChange={(event) => setBuyDetails((current) => ({
+                    ...current,
+                    gstType: event.target.value as "igst" | "sgst",
+                  }))}
+                  className="w-full rounded border border-line/60 bg-white/40 px-3 py-2 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-amber-400/50"
+                >
+                  <option value="igst">IGST (3%)</option>
+                  <option value="sgst">SGST (3%)</option>
+                </select>
+                <div className="mt-1 text-xs text-ink-soft">{formatCurrency(gstAmount)}</div>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-ink-soft mb-1">Discount (%)</label>
+                <input
+                  type="number"
+                  name="discountPercent"
+                  min="0"
+                  max="100"
+                  step="any"
+                  placeholder="0"
+                  value={buyDetails.discountPercent}
+                  onChange={(event) => setBuyDetails((current) => ({ ...current, discountPercent: event.target.value }))}
+                  className="w-full rounded border border-line/60 bg-white/40 px-3 py-2 text-sm text-ink placeholder:text-ink-soft focus:outline-none focus:ring-2 focus:ring-amber-400/50"
+                />
+              </div>
+            </div>
+            <div className="rounded border border-amber-300/70 bg-amber-50/60 px-3 py-2 text-sm text-ink">
+              Discounted Value: <span className="font-semibold">{formatCurrency(discountedValue)}</span>
             </div>
             <div>
               <label className="block text-xs font-medium text-ink-soft mb-1">Note</label>
