@@ -8,6 +8,7 @@ import {
   setMetalGoal,
   updateCurrentRate,
   deleteMetalTransaction,
+  updateMetalPurchase,
   type MetalHoldingData,
   type MetalTransactionData,
   type MetalType,
@@ -39,6 +40,7 @@ export function MetalPageClient({
   const [transactions, setTransactions] = useState(initialTransactions);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [editingTransaction, setEditingTransaction] = useState<MetalTransactionData | null>(null);
   const [buyDetails, setBuyDetails] = useState<MetalPurchaseFormDetails>({
     itemType: "ornament",
     purity: "24k",
@@ -131,6 +133,34 @@ export function MetalPageClient({
         },
         ...prev,
       ]);
+    }
+    setLoading(false);
+  };
+
+  const handleUpdatePurchase = async (formData: FormData) => {
+    if (!editingTransaction) return;
+    setLoading(true);
+    setError("");
+    const grams = Number(formData.get("grams"));
+    const rate = Number(formData.get("rate"));
+    const details = {
+      itemType: formData.get("itemType") as "coin" | "ornament",
+      purity: formData.get("purity") as "24k" | "22k" | "18k",
+      quantity: Number(formData.get("quantity")),
+      makingCharge: Number(formData.get("makingCharge")) || 0,
+      igstAmount: Number(formData.get("igstAmount")) || 0,
+      sgstAmount: Number(formData.get("sgstAmount")) || 0,
+      additionalAmount: Number(formData.get("additionalAmount")) || 0,
+      discountPercent: Number(formData.get("discountPercent")) || 0,
+    };
+    const result = await updateMetalPurchase(editingTransaction.id, metalType, formData.get("date") as string, grams, rate, formData.get("note") as string, details);
+    if ("error" in result) {
+      setError(result.error);
+    } else {
+      const goldValue = grams * rate;
+      const totalAmount = (goldValue + details.makingCharge + details.igstAmount + details.sgstAmount + details.additionalAmount) * (1 - details.discountPercent / 100);
+      setTransactions((current) => current.map((transaction) => transaction.id === editingTransaction.id ? { ...transaction, date: formData.get("date") as string, grams, ratePerGram: rate, note: formData.get("note") as string, ...details, goldValue, totalAmount } : transaction));
+      setEditingTransaction(null);
     }
     setLoading(false);
   };
@@ -342,6 +372,30 @@ export function MetalPageClient({
 
       {/* Tab Content */}
       <div>
+        {editingTransaction && (
+          <form action={handleUpdatePurchase} className="mb-5 space-y-3 rounded-lg border border-amber-300 bg-amber-50/60 p-4">
+            <div className="flex items-center justify-between gap-3">
+              <h3 className="text-sm font-semibold text-ink">Edit Purchase</h3>
+              <button type="button" onClick={() => { setEditingTransaction(null); setError(""); }} className="text-xs text-ink-soft hover:text-ink">Cancel</button>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <input type="date" name="date" required defaultValue={editingTransaction.date} className="rounded border border-line/60 bg-white/60 px-3 py-2 text-sm text-ink" />
+              <input type="number" name="quantity" min="1" step="1" required defaultValue={editingTransaction.quantity} className="rounded border border-line/60 bg-white/60 px-3 py-2 text-sm text-ink" />
+              <select name="itemType" defaultValue={editingTransaction.itemType} className="rounded border border-line/60 bg-white/60 px-3 py-2 text-sm text-ink"><option value="coin">Coin</option><option value="ornament">Ornament</option></select>
+              <select name="purity" defaultValue={editingTransaction.purity} className="rounded border border-line/60 bg-white/60 px-3 py-2 text-sm text-ink"><option value="24k">24K</option><option value="22k">22K</option><option value="18k">18K</option></select>
+              <input type="number" name="grams" min="0.01" step="any" required defaultValue={editingTransaction.grams} placeholder="Grams" className="rounded border border-line/60 bg-white/60 px-3 py-2 text-sm text-ink" />
+              <input type="number" name="rate" min="0.01" step="any" required defaultValue={editingTransaction.ratePerGram} placeholder="Rate per gram" className="rounded border border-line/60 bg-white/60 px-3 py-2 text-sm text-ink" />
+              <input type="number" name="makingCharge" min="0" step="any" defaultValue={editingTransaction.makingCharge} placeholder="Making charge" className="rounded border border-line/60 bg-white/60 px-3 py-2 text-sm text-ink" />
+              <input type="number" name="igstAmount" min="0" step="any" defaultValue={editingTransaction.igstAmount} placeholder="IGST amount" className="rounded border border-line/60 bg-white/60 px-3 py-2 text-sm text-ink" />
+              <input type="number" name="sgstAmount" min="0" step="any" defaultValue={editingTransaction.sgstAmount} placeholder="SGST amount" className="rounded border border-line/60 bg-white/60 px-3 py-2 text-sm text-ink" />
+              <input type="number" name="additionalAmount" min="0" step="any" defaultValue={editingTransaction.additionalAmount} placeholder="Additional amount" className="rounded border border-line/60 bg-white/60 px-3 py-2 text-sm text-ink" />
+              <input type="number" name="discountPercent" min="0" max="100" step="any" defaultValue={editingTransaction.discountPercent} placeholder="Discount (%)" className="rounded border border-line/60 bg-white/60 px-3 py-2 text-sm text-ink" />
+              <input type="text" name="note" defaultValue={editingTransaction.note} placeholder="Note" className="rounded border border-line/60 bg-white/60 px-3 py-2 text-sm text-ink" />
+            </div>
+            {error && <div className="rounded bg-red-100 p-2 text-xs text-red-700">{error}</div>}
+            <button type="submit" disabled={loading} className="rounded bg-amber-600 px-4 py-2 text-sm font-medium text-white hover:bg-amber-700 disabled:opacity-50">{loading ? "Saving..." : "Save Changes"}</button>
+          </form>
+        )}
         {/* Overview Tab */}
         {tab === "overview" && (
           <div>
@@ -403,12 +457,8 @@ export function MetalPageClient({
                             {formatCurrency(tx.totalAmount)}
                           </div>
                         </div>
-                        <button
-                          onClick={() => handleDeleteTransaction(tx.id)}
-                          className="text-xs text-ink-soft hover:text-red-600"
-                        >
-                          ✕
-                        </button>
+                        {tx.type === "buy" && <button onClick={() => { setEditingTransaction(tx); setError(""); }} className="text-xs text-ink-soft hover:text-amber-700">Edit</button>}
+                        <button onClick={() => handleDeleteTransaction(tx.id)} className="text-xs text-ink-soft hover:text-red-600">✕</button>
                       </div>
                     </div>
                   ))}

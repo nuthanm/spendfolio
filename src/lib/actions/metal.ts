@@ -238,6 +238,54 @@ export async function buyMetal(
   return { ok: true as const };
 }
 
+export async function updateMetalPurchase(
+  id: string,
+  metalType: MetalType,
+  date: string,
+  grams: number,
+  ratePerGram: number,
+  note: string,
+  details: MetalPurchaseDetails,
+): Promise<MetalActionResult> {
+  const user = await requireUser();
+  const transaction = await prisma.metalTransaction.findUnique({ where: { id } });
+
+  if (!transaction || transaction.userId !== user.id || transaction.metalType !== metalType || transaction.type !== "buy") {
+    return { error: "Purchase not found" };
+  }
+
+  if (!Number.isFinite(grams) || !Number.isFinite(ratePerGram) || grams <= 0 || ratePerGram <= 0) {
+    return { error: "Grams and rate must be positive" };
+  }
+
+  if (!Number.isInteger(details.quantity) || details.quantity <= 0 ||
+    [details.makingCharge, details.igstAmount, details.sgstAmount, details.additionalAmount].some((amount) => !Number.isFinite(amount) || amount < 0) ||
+    !Number.isFinite(details.discountPercent) || details.discountPercent < 0 || details.discountPercent > 100) {
+    return { error: "Enter valid purchase amounts and a discount between 0% and 100%" };
+  }
+
+  const goldValue = grams * ratePerGram;
+  const subtotal = goldValue + details.makingCharge + details.igstAmount + details.sgstAmount + details.additionalAmount;
+
+  await prisma.metalTransaction.update({
+    where: { id },
+    data: {
+      date, grams, ratePerGram, note,
+      itemType: details.itemType, purity: details.purity, quantity: details.quantity,
+      goldValue, makingCharge: details.makingCharge,
+      gstType: details.igstAmount > 0 && details.sgstAmount > 0 ? "mixed" : details.igstAmount > 0 ? "igst" : "sgst",
+      gstAmount: details.igstAmount + details.sgstAmount,
+      igstAmount: details.igstAmount, sgstAmount: details.sgstAmount,
+      additionalAmount: details.additionalAmount, discountPercent: details.discountPercent,
+      totalAmount: subtotal * (1 - details.discountPercent / 100),
+    },
+  });
+
+  revalidatePath(`/${metalType}`);
+  revalidatePath("/dashboard");
+  return { ok: true as const };
+}
+
 export async function sellMetal(
   metalType: MetalType,
   date: string,
