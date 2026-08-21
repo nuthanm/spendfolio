@@ -507,15 +507,6 @@ export function MetalPageClient({
             </div>
             <div className="grid gap-3 sm:grid-cols-2">
               <div>
-                <label className="block text-xs font-medium text-ink-soft mb-1">{metalValueLabel}</label>
-                <input
-                  type="text"
-                  value={formatCurrency(goldValue)}
-                  readOnly
-                  className="w-full rounded border border-line/60 bg-line/10 px-3 py-2 text-sm text-ink"
-                />
-              </div>
-              <div>
                 <label className="block text-xs font-medium text-ink-soft mb-1">Making Charge</label>
                 <input
                   type="number"
