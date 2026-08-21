@@ -29,8 +29,9 @@ export interface MetalTransactionData {
   quantity: number;
   goldValue: number;
   makingCharge: number;
-  gstType: "igst" | "sgst";
-  gstAmount: number;
+  igstAmount: number;
+  sgstAmount: number;
+  additionalAmount: number;
   discountPercent: number;
   totalAmount: number;
   note: string;
@@ -42,7 +43,9 @@ export interface MetalPurchaseDetails {
   purity: "24k" | "22k" | "18k";
   quantity: number;
   makingCharge: number;
-  gstType: "igst" | "sgst";
+  igstAmount: number;
+  sgstAmount: number;
+  additionalAmount: number;
   discountPercent: number;
 }
 
@@ -158,8 +161,9 @@ export async function getMetalTransactions(metalType: MetalType): Promise<MetalT
     quantity: tx.quantity,
     goldValue: tx.goldValue,
     makingCharge: tx.makingCharge,
-    gstType: tx.gstType as "igst" | "sgst",
-    gstAmount: tx.gstAmount,
+    igstAmount: tx.igstAmount,
+    sgstAmount: tx.sgstAmount,
+    additionalAmount: tx.additionalAmount,
     discountPercent: tx.discountPercent,
     totalAmount: tx.totalAmount,
     note: tx.note,
@@ -187,17 +191,23 @@ export async function buyMetal(
 
   if (
     !Number.isFinite(details.makingCharge) ||
+    !Number.isFinite(details.igstAmount) ||
+    !Number.isFinite(details.sgstAmount) ||
+    !Number.isFinite(details.additionalAmount) ||
     !Number.isFinite(details.discountPercent) ||
     details.makingCharge < 0 ||
+    details.igstAmount < 0 ||
+    details.sgstAmount < 0 ||
+    details.additionalAmount < 0 ||
     details.discountPercent < 0 ||
     details.discountPercent > 100
   ) {
-    return { error: "Making charge must be positive and discount must be between 0% and 100%" };
+    return { error: "Charges and taxes cannot be negative, and discount must be between 0% and 100%" };
   }
 
   const goldValue = grams * ratePerGram;
-  const gstAmount = (goldValue + details.makingCharge) * 0.03;
-  const totalAmount = (goldValue + details.makingCharge + gstAmount) * (1 - details.discountPercent / 100);
+  const subtotal = goldValue + details.makingCharge + details.igstAmount + details.sgstAmount + details.additionalAmount;
+  const totalAmount = subtotal * (1 - details.discountPercent / 100);
 
   await prisma.metalTransaction.create({
     data: {
@@ -212,8 +222,11 @@ export async function buyMetal(
       quantity: details.quantity,
       goldValue,
       makingCharge: details.makingCharge,
-      gstType: details.gstType,
-      gstAmount,
+      gstType: details.igstAmount > 0 && details.sgstAmount > 0 ? "mixed" : details.igstAmount > 0 ? "igst" : "sgst",
+      gstAmount: details.igstAmount + details.sgstAmount,
+      igstAmount: details.igstAmount,
+      sgstAmount: details.sgstAmount,
+      additionalAmount: details.additionalAmount,
       discountPercent: details.discountPercent,
       totalAmount,
       note,

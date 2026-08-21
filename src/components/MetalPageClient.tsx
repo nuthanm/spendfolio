@@ -20,7 +20,9 @@ type MetalPurchaseFormDetails = {
   grams: string;
   rate: string;
   makingCharge: string;
-  gstType: "igst" | "sgst";
+  igstAmount: string;
+  sgstAmount: string;
+  additionalAmount: string;
   discountPercent: string;
 };
 
@@ -44,7 +46,9 @@ export function MetalPageClient({
     grams: "",
     rate: "",
     makingCharge: "",
-    gstType: "sgst",
+    igstAmount: "",
+    sgstAmount: "",
+    additionalAmount: "",
     discountPercent: "",
   });
 
@@ -67,9 +71,13 @@ export function MetalPageClient({
   const metalValueLabel = `${capitalLabel} Value`;
   const goldValue = (Number.parseFloat(buyDetails.grams) || 0) * (Number.parseFloat(buyDetails.rate) || 0);
   const makingCharge = Number.parseFloat(buyDetails.makingCharge) || 0;
-  const gstAmount = (goldValue + makingCharge) * 0.03;
+  const makingChargePercent = goldValue > 0 ? (makingCharge / goldValue) * 100 : 0;
+  const igstAmount = Number.parseFloat(buyDetails.igstAmount) || 0;
+  const sgstAmount = Number.parseFloat(buyDetails.sgstAmount) || 0;
+  const additionalAmount = Number.parseFloat(buyDetails.additionalAmount) || 0;
   const discountPercent = Number.parseFloat(buyDetails.discountPercent) || 0;
-  const discountedValue = (goldValue + makingCharge + gstAmount) * (1 - discountPercent / 100);
+  const subtotal = goldValue + makingCharge + igstAmount + sgstAmount + additionalAmount;
+  const discountedValue = subtotal * (1 - discountPercent / 100);
 
   // Buy handler
   const handleBuy = async (formData: FormData) => {
@@ -84,7 +92,9 @@ export function MetalPageClient({
       purity: formData.get("purity") as "24k" | "22k" | "18k",
       quantity: parseInt(formData.get("quantity") as string, 10),
       makingCharge: parseFloat(formData.get("makingCharge") as string) || 0,
-      gstType: formData.get("gstType") as "igst" | "sgst",
+      igstAmount: parseFloat(formData.get("igstAmount") as string) || 0,
+      sgstAmount: parseFloat(formData.get("sgstAmount") as string) || 0,
+      additionalAmount: parseFloat(formData.get("additionalAmount") as string) || 0,
       discountPercent: parseFloat(formData.get("discountPercent") as string) || 0,
     };
 
@@ -111,8 +121,9 @@ export function MetalPageClient({
           quantity: details.quantity,
           goldValue,
           makingCharge: details.makingCharge,
-          gstType: details.gstType,
-          gstAmount: (goldValue + details.makingCharge) * 0.03,
+          igstAmount: details.igstAmount,
+          sgstAmount: details.sgstAmount,
+          additionalAmount: details.additionalAmount,
           discountPercent: details.discountPercent,
           totalAmount: discountedValue,
           note,
@@ -159,8 +170,9 @@ export function MetalPageClient({
           quantity: 1,
           goldValue: grams * rate,
           makingCharge: 0,
-          gstType: "sgst",
-          gstAmount: 0,
+          igstAmount: 0,
+          sgstAmount: 0,
+          additionalAmount: 0,
           discountPercent: 0,
           totalAmount,
           note,
@@ -374,7 +386,8 @@ export function MetalPageClient({
                         )}
                         {tx.type === "buy" && (
                           <div className="mt-1 text-xs text-ink-soft">
-                            {tx.quantity} {tx.itemType} {tx.purity.toUpperCase()} | {metalValueLabel}: {formatCurrency(tx.goldValue)} | {tx.gstType.toUpperCase()} GST: {formatCurrency(tx.gstAmount)}
+                            {tx.quantity} {tx.itemType} {tx.purity.toUpperCase()} | {metalValueLabel}: {formatCurrency(tx.goldValue)} | IGST: {formatCurrency(tx.igstAmount)} | SGST: {formatCurrency(tx.sgstAmount)}
+                            {tx.additionalAmount > 0 && ` | Additional: ${formatCurrency(tx.additionalAmount)}`}
                             {tx.discountPercent > 0 && ` | Discount: ${tx.discountPercent}%`}
                           </div>
                         )}
@@ -514,22 +527,46 @@ export function MetalPageClient({
                   onChange={(event) => setBuyDetails((current) => ({ ...current, makingCharge: event.target.value }))}
                   className="w-full rounded border border-line/60 bg-white/40 px-3 py-2 text-sm text-ink placeholder:text-ink-soft focus:outline-none focus:ring-2 focus:ring-amber-400/50"
                 />
+                <div className="mt-1 text-xs text-ink-soft">{makingChargePercent.toFixed(2)}% of {capitalLabel.toLowerCase()} value</div>
               </div>
               <div>
-                <label className="block text-xs font-medium text-ink-soft mb-1">GST</label>
-                <select
-                  name="gstType"
-                  value={buyDetails.gstType}
-                  onChange={(event) => setBuyDetails((current) => ({
-                    ...current,
-                    gstType: event.target.value as "igst" | "sgst",
-                  }))}
-                  className="w-full rounded border border-line/60 bg-white/40 px-3 py-2 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-amber-400/50"
-                >
-                  <option value="igst">IGST (3%)</option>
-                  <option value="sgst">SGST (3%)</option>
-                </select>
-                <div className="mt-1 text-xs text-ink-soft">{formatCurrency(gstAmount)}</div>
+                <label className="block text-xs font-medium text-ink-soft mb-1">IGST Amount</label>
+                <input
+                  type="number"
+                  name="igstAmount"
+                  min="0"
+                  step="any"
+                  placeholder="0"
+                  value={buyDetails.igstAmount}
+                  onChange={(event) => setBuyDetails((current) => ({ ...current, igstAmount: event.target.value }))}
+                  className="w-full rounded border border-line/60 bg-white/40 px-3 py-2 text-sm text-ink placeholder:text-ink-soft focus:outline-none focus:ring-2 focus:ring-amber-400/50"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-ink-soft mb-1">SGST Amount</label>
+                <input
+                  type="number"
+                  name="sgstAmount"
+                  min="0"
+                  step="any"
+                  placeholder="0"
+                  value={buyDetails.sgstAmount}
+                  onChange={(event) => setBuyDetails((current) => ({ ...current, sgstAmount: event.target.value }))}
+                  className="w-full rounded border border-line/60 bg-white/40 px-3 py-2 text-sm text-ink placeholder:text-ink-soft focus:outline-none focus:ring-2 focus:ring-amber-400/50"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-ink-soft mb-1">Additional Amount</label>
+                <input
+                  type="number"
+                  name="additionalAmount"
+                  min="0"
+                  step="any"
+                  placeholder="0"
+                  value={buyDetails.additionalAmount}
+                  onChange={(event) => setBuyDetails((current) => ({ ...current, additionalAmount: event.target.value }))}
+                  className="w-full rounded border border-line/60 bg-white/40 px-3 py-2 text-sm text-ink placeholder:text-ink-soft focus:outline-none focus:ring-2 focus:ring-amber-400/50"
+                />
               </div>
               <div>
                 <label className="block text-xs font-medium text-ink-soft mb-1">Discount (%)</label>
@@ -547,7 +584,8 @@ export function MetalPageClient({
               </div>
             </div>
             <div className="rounded border border-amber-300/70 bg-amber-50/60 px-3 py-2 text-sm text-ink">
-              Discounted Value: <span className="font-semibold">{formatCurrency(discountedValue)}</span>
+              <div>Purchase subtotal: <span className="font-semibold">{formatCurrency(subtotal)}</span></div>
+              <div className="mt-1">Final value after discount: <span className="font-semibold">{formatCurrency(discountedValue)}</span></div>
             </div>
             <div>
               <label className="block text-xs font-medium text-ink-soft mb-1">Note</label>

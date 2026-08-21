@@ -122,6 +122,9 @@ model MetalTransaction {
   makingCharge Float   @default(0)
   gstType     String   @default("sgst") // igst | sgst
   gstAmount   Float    @default(0)
+  igstAmount  Float    @default(0)
+  sgstAmount  Float    @default(0)
+  additionalAmount Float @default(0)
   discountPercent Float @default(0)
   totalAmount Float
   note        String   @default("")
