@@ -30,7 +30,10 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className={`${syne.variable} ${plexMono.variable} h-full antialiased`}>
-      <body className="min-h-full flex flex-col font-[family-name:var(--font-display)]">
+      <body
+        suppressHydrationWarning
+        className="min-h-full flex flex-col font-[family-name:var(--font-display)]"
+      >
         {children}
       </body>
     </html>

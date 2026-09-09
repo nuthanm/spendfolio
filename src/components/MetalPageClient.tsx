@@ -5,6 +5,7 @@ import { AnimatedNumber } from "@/components/AnimatedNumber";
 import {
   buyMetal,
   sellMetal,
+  updateMetalSale,
   setMetalGoal,
   updateCurrentRate,
   deleteMetalTransaction,
@@ -15,7 +16,9 @@ import {
 } from "@/lib/actions/metal";
 
 type MetalPurchaseFormDetails = {
-  itemType: "coin" | "ornament";
+  date: string;
+  itemType: string;
+  customItemType: string;
   purity: "24k" | "22k" | "18k";
   quantity: string;
   grams: string;
@@ -25,6 +28,14 @@ type MetalPurchaseFormDetails = {
   sgstAmount: string;
   additionalAmount: string;
   discountPercent: string;
+  note: string;
+};
+
+type MetalSellFormDetails = {
+  date: string;
+  grams: string;
+  rate: string;
+  note: string;
 };
 
 export function MetalPageClient({
@@ -36,13 +47,16 @@ export function MetalPageClient({
   initialHolding: MetalHoldingData;
   initialTransactions: MetalTransactionData[];
 }) {
+  const today = new Date().toISOString().split("T")[0];
   const [holding, setHolding] = useState(initialHolding);
   const [transactions, setTransactions] = useState(initialTransactions);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [editingTransaction, setEditingTransaction] = useState<MetalTransactionData | null>(null);
   const [buyDetails, setBuyDetails] = useState<MetalPurchaseFormDetails>({
-    itemType: "ornament",
+    date: today,
+    itemType: metalType === "gold" ? "ring" : "ornament",
+    customItemType: "",
     purity: "24k",
     quantity: "1",
     grams: "",
@@ -52,6 +66,13 @@ export function MetalPageClient({
     sgstAmount: "",
     additionalAmount: "",
     discountPercent: "",
+    note: "",
+  });
+  const [sellDetails, setSellDetails] = useState<MetalSellFormDetails>({
+    date: today,
+    grams: "",
+    rate: "",
+    note: "",
   });
 
   // Tabs: overview, add-transaction, set-goal
@@ -70,6 +91,8 @@ export function MetalPageClient({
   };
 
   const capitalLabel = metalType === "gold" ? "Gold" : "Silver";
+  const isGold = metalType === "gold";
+  const goldItemOptions = ["ring", "ear rings", "chains"];
   const metalValueLabel = `${capitalLabel} Value`;
   const goldValue = (Number.parseFloat(buyDetails.grams) || 0) * (Number.parseFloat(buyDetails.rate) || 0);
   const makingCharge = Number.parseFloat(buyDetails.makingCharge) || 0;
@@ -81,6 +104,78 @@ export function MetalPageClient({
   const subtotal = goldValue + makingCharge + igstAmount + sgstAmount + additionalAmount;
   const discountedValue = subtotal * (1 - discountPercent / 100);
 
+  const resetBuyForm = () => {
+    setBuyDetails({
+      date: today,
+      itemType: isGold ? "ring" : "ornament",
+      customItemType: "",
+      purity: "24k",
+      quantity: "1",
+      grams: "",
+      rate: "",
+      makingCharge: "",
+      igstAmount: "",
+      sgstAmount: "",
+      additionalAmount: "",
+      discountPercent: "",
+      note: "",
+    });
+  };
+
+  const resetSellForm = () => {
+    setSellDetails({
+      date: today,
+      grams: "",
+      rate: "",
+      note: "",
+    });
+  };
+
+  const startEdit = (transaction: MetalTransactionData) => {
+    setEditingTransaction(transaction);
+    setError("");
+
+    if (transaction.type === "buy") {
+      const normalizedItemType = transaction.itemType.toLowerCase();
+      const selectedItemType = isGold
+        ? (goldItemOptions.includes(normalizedItemType) ? normalizedItemType : "other")
+        : transaction.itemType;
+
+      setBuyDetails({
+        date: transaction.date,
+        itemType: selectedItemType,
+        customItemType: isGold && selectedItemType === "other" ? transaction.itemType : "",
+        purity: transaction.purity,
+        quantity: String(transaction.quantity),
+        grams: String(transaction.grams),
+        rate: String(transaction.ratePerGram),
+        makingCharge: String(transaction.makingCharge),
+        igstAmount: String(transaction.igstAmount),
+        sgstAmount: String(transaction.sgstAmount),
+        additionalAmount: String(transaction.additionalAmount),
+        discountPercent: String(transaction.discountPercent),
+        note: transaction.note,
+      });
+      setTab("buy");
+      return;
+    }
+
+    setSellDetails({
+      date: transaction.date,
+      grams: String(transaction.grams),
+      rate: String(transaction.ratePerGram),
+      note: transaction.note,
+    });
+    setTab("sell");
+  };
+
+  const cancelEdit = () => {
+    setEditingTransaction(null);
+    setError("");
+    resetBuyForm();
+    resetSellForm();
+  };
+
   // Buy handler
   const handleBuy = async (formData: FormData) => {
     setLoading(true);
@@ -89,8 +184,24 @@ export function MetalPageClient({
     const grams = parseFloat(formData.get("grams") as string);
     const rate = parseFloat(formData.get("rate") as string);
     const note = formData.get("note") as string;
+    const rawItemType = (formData.get("itemType") as string) || "";
+    const customItemType = ((formData.get("customItemType") as string) || "").trim();
+    const itemType = rawItemType === "other" ? customItemType : rawItemType;
+
+    if (!itemType) {
+      setLoading(false);
+      setError("Please select item type");
+      return;
+    }
+
+    if (isGold && rawItemType === "other" && !customItemType) {
+      setLoading(false);
+      setError("Enter the item type when selecting Other");
+      return;
+    }
+
     const details = {
-      itemType: formData.get("itemType") as "coin" | "ornament",
+      itemType,
       purity: formData.get("purity") as "24k" | "22k" | "18k",
       quantity: parseInt(formData.get("quantity") as string, 10),
       makingCharge: parseFloat(formData.get("makingCharge") as string) || 0,
@@ -133,6 +244,8 @@ export function MetalPageClient({
         },
         ...prev,
       ]);
+      setEditingTransaction(null);
+      resetBuyForm();
     }
     setLoading(false);
   };
@@ -143,8 +256,24 @@ export function MetalPageClient({
     setError("");
     const grams = Number(formData.get("grams"));
     const rate = Number(formData.get("rate"));
+    const rawItemType = (formData.get("itemType") as string) || "";
+    const customItemType = ((formData.get("customItemType") as string) || "").trim();
+    const itemType = rawItemType === "other" ? customItemType : rawItemType;
+
+    if (!itemType) {
+      setLoading(false);
+      setError("Please select item type");
+      return;
+    }
+
+    if (isGold && rawItemType === "other" && !customItemType) {
+      setLoading(false);
+      setError("Enter the item type when selecting Other");
+      return;
+    }
+
     const details = {
-      itemType: formData.get("itemType") as "coin" | "ornament",
+      itemType,
       purity: formData.get("purity") as "24k" | "22k" | "18k",
       quantity: Number(formData.get("quantity")),
       makingCharge: Number(formData.get("makingCharge")) || 0,
@@ -160,7 +289,8 @@ export function MetalPageClient({
       const goldValue = grams * rate;
       const totalAmount = (goldValue + details.makingCharge + details.igstAmount + details.sgstAmount + details.additionalAmount) * (1 - details.discountPercent / 100);
       setTransactions((current) => current.map((transaction) => transaction.id === editingTransaction.id ? { ...transaction, date: formData.get("date") as string, grams, ratePerGram: rate, note: formData.get("note") as string, ...details, goldValue, totalAmount } : transaction));
-      setEditingTransaction(null);
+      cancelEdit();
+      setTab("overview");
     }
     setLoading(false);
   };
@@ -173,6 +303,30 @@ export function MetalPageClient({
     const grams = parseFloat(formData.get("grams") as string);
     const rate = parseFloat(formData.get("rate") as string);
     const note = formData.get("note") as string;
+
+    if (editingTransaction?.type === "sell") {
+      const result = await updateMetalSale(editingTransaction.id, metalType, date, grams, rate, note);
+      if ("error" in result) {
+        setError(result.error);
+      } else {
+        const totalAmount = grams * rate;
+        const costOfSold = grams * holding.averageCostPerGram;
+        const realizedPL = totalAmount - costOfSold;
+        setTransactions((current) => current.map((transaction) => transaction.id === editingTransaction.id ? {
+          ...transaction,
+          date,
+          grams,
+          ratePerGram: rate,
+          note,
+          totalAmount,
+          realizedPL,
+        } : transaction));
+        cancelEdit();
+        setTab("overview");
+      }
+      setLoading(false);
+      return;
+    }
 
     const result = await sellMetal(metalType, date, grams, rate, note);
     if ("error" in result) {
@@ -210,6 +364,8 @@ export function MetalPageClient({
         },
         ...prev,
       ]);
+      setEditingTransaction(null);
+      resetSellForm();
     }
     setLoading(false);
   };
@@ -360,6 +516,7 @@ export function MetalPageClient({
               onClick={() => {
                 setTab(t.id);
                 setError("");
+                setEditingTransaction(null);
               }}
               data-active={tab === t.id}
               className="px-4 py-2 text-sm font-medium text-ink-soft transition-colors hover:text-ink data-[active=true]:border-b-2 data-[active=true]:border-amber-500 data-[active=true]:text-ink"
@@ -372,30 +529,6 @@ export function MetalPageClient({
 
       {/* Tab Content */}
       <div>
-        {editingTransaction && (
-          <form action={handleUpdatePurchase} className="mb-5 space-y-3 rounded-lg border border-amber-300 bg-amber-50/60 p-4">
-            <div className="flex items-center justify-between gap-3">
-              <h3 className="text-sm font-semibold text-ink">Edit Purchase</h3>
-              <button type="button" onClick={() => { setEditingTransaction(null); setError(""); }} className="text-xs text-ink-soft hover:text-ink">Cancel</button>
-            </div>
-            <div className="grid gap-3 sm:grid-cols-2">
-              <input type="date" name="date" required defaultValue={editingTransaction.date} className="rounded border border-line/60 bg-white/60 px-3 py-2 text-sm text-ink" />
-              <input type="number" name="quantity" min="1" step="1" required defaultValue={editingTransaction.quantity} className="rounded border border-line/60 bg-white/60 px-3 py-2 text-sm text-ink" />
-              <select name="itemType" defaultValue={editingTransaction.itemType} className="rounded border border-line/60 bg-white/60 px-3 py-2 text-sm text-ink"><option value="coin">Coin</option><option value="ornament">Ornament</option></select>
-              <select name="purity" defaultValue={editingTransaction.purity} className="rounded border border-line/60 bg-white/60 px-3 py-2 text-sm text-ink"><option value="24k">24K</option><option value="22k">22K</option><option value="18k">18K</option></select>
-              <input type="number" name="grams" min="0.01" step="any" required defaultValue={editingTransaction.grams} placeholder="Grams" className="rounded border border-line/60 bg-white/60 px-3 py-2 text-sm text-ink" />
-              <input type="number" name="rate" min="0.01" step="any" required defaultValue={editingTransaction.ratePerGram} placeholder="Rate per gram" className="rounded border border-line/60 bg-white/60 px-3 py-2 text-sm text-ink" />
-              <input type="number" name="makingCharge" min="0" step="any" defaultValue={editingTransaction.makingCharge} placeholder="Making charge" className="rounded border border-line/60 bg-white/60 px-3 py-2 text-sm text-ink" />
-              <input type="number" name="igstAmount" min="0" step="any" defaultValue={editingTransaction.igstAmount} placeholder="IGST amount" className="rounded border border-line/60 bg-white/60 px-3 py-2 text-sm text-ink" />
-              <input type="number" name="sgstAmount" min="0" step="any" defaultValue={editingTransaction.sgstAmount} placeholder="SGST amount" className="rounded border border-line/60 bg-white/60 px-3 py-2 text-sm text-ink" />
-              <input type="number" name="additionalAmount" min="0" step="any" defaultValue={editingTransaction.additionalAmount} placeholder="Additional amount" className="rounded border border-line/60 bg-white/60 px-3 py-2 text-sm text-ink" />
-              <input type="number" name="discountPercent" min="0" max="100" step="any" defaultValue={editingTransaction.discountPercent} placeholder="Discount (%)" className="rounded border border-line/60 bg-white/60 px-3 py-2 text-sm text-ink" />
-              <input type="text" name="note" defaultValue={editingTransaction.note} placeholder="Note" className="rounded border border-line/60 bg-white/60 px-3 py-2 text-sm text-ink" />
-            </div>
-            {error && <div className="rounded bg-red-100 p-2 text-xs text-red-700">{error}</div>}
-            <button type="submit" disabled={loading} className="rounded bg-amber-600 px-4 py-2 text-sm font-medium text-white hover:bg-amber-700 disabled:opacity-50">{loading ? "Saving..." : "Save Changes"}</button>
-          </form>
-        )}
         {/* Overview Tab */}
         {tab === "overview" && (
           <div>
@@ -457,7 +590,7 @@ export function MetalPageClient({
                             {formatCurrency(tx.totalAmount)}
                           </div>
                         </div>
-                        {tx.type === "buy" && <button onClick={() => { setEditingTransaction(tx); setError(""); }} className="text-xs text-ink-soft hover:text-amber-700">Edit</button>}
+                        <button onClick={() => startEdit(tx)} className="text-xs text-ink-soft hover:text-amber-700">Edit</button>
                         <button onClick={() => handleDeleteTransaction(tx.id)} className="text-xs text-ink-soft hover:text-red-600">✕</button>
                       </div>
                     </div>
@@ -470,14 +603,21 @@ export function MetalPageClient({
 
         {/* Buy Tab */}
         {tab === "buy" && (
-          <form action={handleBuy} className="space-y-3">
+          <form action={editingTransaction?.type === "buy" ? handleUpdatePurchase : handleBuy} className="space-y-3">
+            {editingTransaction?.type === "buy" && (
+              <div className="flex items-center justify-between rounded border border-amber-300 bg-amber-50/60 px-3 py-2 text-xs text-ink">
+                <span>Editing buy transaction</span>
+                <button type="button" onClick={cancelEdit} className="text-amber-700 hover:text-amber-800">Cancel</button>
+              </div>
+            )}
             <div>
               <label className="block text-xs font-medium text-ink-soft mb-1">Purchase Date</label>
               <input
                 type="date"
                 name="date"
                 required
-                defaultValue={new Date().toISOString().split("T")[0]}
+                value={buyDetails.date}
+                onChange={(event) => setBuyDetails((current) => ({ ...current, date: event.target.value }))}
                 className="w-full rounded border border-line/60 bg-white/40 px-3 py-2 text-sm text-ink placeholder:text-ink-soft focus:outline-none focus:ring-2 focus:ring-amber-400/50"
               />
             </div>
@@ -489,14 +629,40 @@ export function MetalPageClient({
                   value={buyDetails.itemType}
                   onChange={(event) => setBuyDetails((current) => ({
                     ...current,
-                    itemType: event.target.value as "coin" | "ornament",
+                    itemType: event.target.value,
                   }))}
                   className="w-full rounded border border-line/60 bg-white/40 px-3 py-2 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-amber-400/50"
                 >
-                  <option value="coin">Coin</option>
-                  <option value="ornament">Ornament</option>
+                  {isGold ? (
+                    <>
+                      <option value="ring">Ring</option>
+                      <option value="ear rings">Ear Rings</option>
+                      <option value="chains">Chains</option>
+                      <option value="other">Other</option>
+                    </>
+                  ) : (
+                    <>
+                      <option value="coin">Coin</option>
+                      <option value="ornament">Ornament</option>
+                    </>
+                  )}
                 </select>
               </div>
+              {isGold && buyDetails.itemType === "other" && (
+                <div>
+                  <label className="block text-xs font-medium text-ink-soft mb-1">Custom Item Type</label>
+                  <input
+                    type="text"
+                    name="customItemType"
+                    required
+                    value={buyDetails.customItemType}
+                    onChange={(event) => setBuyDetails((current) => ({ ...current, customItemType: event.target.value }))}
+                    placeholder="e.g., pendant"
+                    className="w-full rounded border border-line/60 bg-white/40 px-3 py-2 text-sm text-ink placeholder:text-ink-soft focus:outline-none focus:ring-2 focus:ring-amber-400/50"
+                  />
+                </div>
+              )}
+              {!isGold && <input type="hidden" name="customItemType" value="" />}
               <div>
                 <label className="block text-xs font-medium text-ink-soft mb-1">Purity</label>
                 <select
@@ -519,7 +685,6 @@ export function MetalPageClient({
                   type="number"
                   name="quantity"
                   min="1"
-                  step="1"
                   required
                   value={buyDetails.quantity}
                   onChange={(event) => setBuyDetails((current) => ({ ...current, quantity: event.target.value }))}
@@ -634,6 +799,8 @@ export function MetalPageClient({
                 type="text"
                 name="note"
                 placeholder="e.g., Purchased from jeweler"
+                value={buyDetails.note}
+                onChange={(event) => setBuyDetails((current) => ({ ...current, note: event.target.value }))}
                 className="w-full rounded border border-line/60 bg-white/40 px-3 py-2 text-sm text-ink placeholder:text-ink-soft focus:outline-none focus:ring-2 focus:ring-amber-400/50"
               />
             </div>
@@ -643,7 +810,7 @@ export function MetalPageClient({
               disabled={loading}
               className="w-full rounded bg-green-600 px-4 py-2 text-sm font-medium text-white hover:bg-green-700 disabled:opacity-50"
             >
-              {loading ? "Adding..." : "Add Purchase"}
+              {loading ? (editingTransaction?.type === "buy" ? "Saving..." : "Adding...") : (editingTransaction?.type === "buy" ? "Save Buy Changes" : "Add Purchase")}
             </button>
           </form>
         )}
@@ -651,6 +818,12 @@ export function MetalPageClient({
         {/* Sell Tab */}
         {tab === "sell" && (
           <form action={handleSell} className="space-y-3">
+            {editingTransaction?.type === "sell" && (
+              <div className="flex items-center justify-between rounded border border-amber-300 bg-amber-50/60 px-3 py-2 text-xs text-ink">
+                <span>Editing sell transaction</span>
+                <button type="button" onClick={cancelEdit} className="text-amber-700 hover:text-amber-800">Cancel</button>
+              </div>
+            )}
             <div className="rounded-lg border border-line/60 bg-white/40 p-3 backdrop-blur-sm">
               <div className="text-xs text-ink-soft">Available to sell</div>
               <div className="text-lg font-bold text-ink">{formatGrams(holding.totalGrams)}g</div>
@@ -661,7 +834,8 @@ export function MetalPageClient({
                 type="date"
                 name="date"
                 required
-                defaultValue={new Date().toISOString().split("T")[0]}
+                value={sellDetails.date}
+                onChange={(event) => setSellDetails((current) => ({ ...current, date: event.target.value }))}
                 className="w-full rounded border border-line/60 bg-white/40 px-3 py-2 text-sm text-ink placeholder:text-ink-soft focus:outline-none focus:ring-2 focus:ring-amber-400/50"
               />
             </div>
@@ -674,6 +848,8 @@ export function MetalPageClient({
                   step="any"
                   placeholder="5.5"
                   required
+                  value={sellDetails.grams}
+                  onChange={(event) => setSellDetails((current) => ({ ...current, grams: event.target.value }))}
                   className="w-full rounded border border-line/60 bg-white/40 px-3 py-2 text-sm text-ink placeholder:text-ink-soft focus:outline-none focus:ring-2 focus:ring-amber-400/50"
                 />
               </div>
@@ -687,6 +863,8 @@ export function MetalPageClient({
                   step="any"
                   placeholder="5200"
                   required
+                  value={sellDetails.rate}
+                  onChange={(event) => setSellDetails((current) => ({ ...current, rate: event.target.value }))}
                   className="w-full rounded border border-line/60 bg-white/40 px-3 py-2 text-sm text-ink placeholder:text-ink-soft focus:outline-none focus:ring-2 focus:ring-amber-400/50"
                 />
               </div>
@@ -697,6 +875,8 @@ export function MetalPageClient({
                 type="text"
                 name="note"
                 placeholder="e.g., Sold to jeweler"
+                value={sellDetails.note}
+                onChange={(event) => setSellDetails((current) => ({ ...current, note: event.target.value }))}
                 className="w-full rounded border border-line/60 bg-white/40 px-3 py-2 text-sm text-ink placeholder:text-ink-soft focus:outline-none focus:ring-2 focus:ring-amber-400/50"
               />
             </div>
@@ -706,7 +886,7 @@ export function MetalPageClient({
               disabled={loading || holding.totalGrams === 0}
               className="w-full rounded bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-50"
             >
-              {loading ? "Selling..." : "Sell"}
+              {loading ? (editingTransaction?.type === "sell" ? "Saving..." : "Selling...") : (editingTransaction?.type === "sell" ? "Save Sell Changes" : "Sell")}
             </button>
           </form>
         )}

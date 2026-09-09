@@ -21,6 +21,9 @@ export default function AccountPage() {
   const [disableCode, setDisableCode] = useState("");
   const [message, setMessage] = useState<string | null>(null);
   const [qr, setQr] = useState<string | null>(null);
+  const [exportType, setExportType] = useState<"expenses" | "gold" | "silver" | "house">("expenses");
+  const [expenseScope, setExpenseScope] = useState<"whole" | "month">("whole");
+  const [expenseMonth, setExpenseMonth] = useState(() => new Date().toISOString().slice(0, 7));
   const [pending, startTransition] = useTransition();
   const [enabledModules, setEnabledModulesState] = useState<WealthModule[]>([]);
 
@@ -113,6 +116,22 @@ export default function AccountPage() {
     });
   }
 
+  function downloadSpreadsheet() {
+    const params = new URLSearchParams({ type: exportType });
+    if (exportType === "expenses") {
+      params.set("scope", expenseScope);
+      if (expenseScope === "month") params.set("month", expenseMonth);
+    }
+    const link = document.createElement("a");
+    link.href = `/api/export?${params.toString()}`;
+    link.click();
+    setMessage(
+      exportType === "expenses"
+        ? `Expense spreadsheet download started (${expenseScope === "whole" ? "one worksheet per month" : expenseMonth}).`
+        : `${exportType[0].toUpperCase()}${exportType.slice(1)} spreadsheet download started.`,
+    );
+  }
+
   return (
     <AppShellWithModules
       title="Account"
@@ -165,9 +184,38 @@ export default function AccountPage() {
         <section className="border border-line bg-white/50 p-5 anim-rise-delay-1">
           <h2 className="text-lg font-bold text-ink">Export data</h2>
           <p className="mt-2 text-sm text-ink-soft">
-            Download income, expenses, and custom fields — for your backup, not a shared suite.
+            Download detailed Excel workbooks for expenses, gold, silver, or house tracking.
           </p>
+          <div className="mt-4 grid gap-3 sm:grid-cols-2">
+            <label className="text-sm font-medium text-ink">
+              Data to export
+              <select className="field mt-1 w-full" value={exportType} onChange={(event) => setExportType(event.target.value as typeof exportType)}>
+                <option value="expenses">Expenses</option>
+                <option value="gold">Gold</option>
+                <option value="silver">Silver</option>
+                <option value="house">House</option>
+              </select>
+            </label>
+            {exportType === "expenses" ? (
+              <label className="text-sm font-medium text-ink">
+                Expense period
+                <select className="field mt-1 w-full" value={expenseScope} onChange={(event) => setExpenseScope(event.target.value as typeof expenseScope)}>
+                  <option value="whole">Whole export (worksheet per month)</option>
+                  <option value="month">Month on month</option>
+                </select>
+              </label>
+            ) : null}
+            {exportType === "expenses" && expenseScope === "month" ? (
+              <label className="text-sm font-medium text-ink sm:col-span-2">
+                Month
+                <input className="field mt-1 w-full" type="month" value={expenseMonth} onChange={(event) => setExpenseMonth(event.target.value)} />
+              </label>
+            ) : null}
+          </div>
           <div className="mt-4 flex flex-wrap gap-2">
+            <button type="button" className="btn-primary px-4 py-2 text-sm" onClick={downloadSpreadsheet}>
+              Download Excel
+            </button>
             <button
               type="button"
               className="btn-primary px-4 py-2 text-sm"

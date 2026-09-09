@@ -24,7 +24,7 @@ export interface MetalTransactionData {
   type: "buy" | "sell";
   grams: number;
   ratePerGram: number;
-  itemType: "coin" | "ornament";
+  itemType: string;
   purity: "24k" | "22k" | "18k";
   quantity: number;
   goldValue: number;
@@ -39,7 +39,7 @@ export interface MetalTransactionData {
 }
 
 export interface MetalPurchaseDetails {
-  itemType: "coin" | "ornament";
+  itemType: string;
   purity: "24k" | "22k" | "18k";
   quantity: number;
   makingCharge: number;
@@ -278,6 +278,80 @@ export async function updateMetalPurchase(
       igstAmount: details.igstAmount, sgstAmount: details.sgstAmount,
       additionalAmount: details.additionalAmount, discountPercent: details.discountPercent,
       totalAmount: subtotal * (1 - details.discountPercent / 100),
+    },
+  });
+
+  revalidatePath(`/${metalType}`);
+  revalidatePath("/dashboard");
+  return { ok: true as const };
+}
+
+export async function updateMetalSale(
+  id: string,
+  metalType: MetalType,
+  date: string,
+  grams: number,
+  ratePerGram: number,
+  note: string,
+): Promise<MetalActionResult> {
+  const user = await requireUser();
+  const transaction = await prisma.metalTransaction.findUnique({ where: { id } });
+
+  if (!transaction || transaction.userId !== user.id || transaction.metalType !== metalType || transaction.type !== "sell") {
+    return { error: "Sale not found" };
+  }
+
+  if (!Number.isFinite(grams) || !Number.isFinite(ratePerGram) || grams <= 0 || ratePerGram <= 0) {
+    return { error: "Grams and rate must be positive" };
+  }
+
+  const allTransactions = await prisma.metalTransaction.findMany({
+    where: {
+      userId: user.id,
+      metalType,
+      NOT: { id },
+    },
+    orderBy: { date: "asc" },
+  });
+
+  let availableGrams = 0;
+  for (const tx of allTransactions) {
+    availableGrams += tx.type === "buy" ? tx.grams : -tx.grams;
+  }
+
+  if (grams > Math.max(0, availableGrams)) {
+    return { error: `Cannot sell ${grams}g. You only have ${Math.max(0, availableGrams)}g available outside this sale.` };
+  }
+
+  let runningGrams = 0;
+  let runningCost = 0;
+  for (const tx of allTransactions) {
+    if (tx.type === "buy") {
+      runningGrams += tx.grams;
+      runningCost += tx.totalAmount;
+    } else {
+      runningGrams -= tx.grams;
+      if (runningGrams > 0) {
+        const avgCost = runningCost / (runningGrams + tx.grams);
+        runningCost -= tx.grams * avgCost;
+      }
+    }
+  }
+  const averageCostPerGram = runningGrams > 0 ? runningCost / runningGrams : 0;
+
+  const totalAmount = grams * ratePerGram;
+  const costOfSold = grams * averageCostPerGram;
+  const realizedPL = totalAmount - costOfSold;
+
+  await prisma.metalTransaction.update({
+    where: { id },
+    data: {
+      date,
+      grams,
+      ratePerGram,
+      totalAmount,
+      note,
+      realizedPL,
     },
   });
 
