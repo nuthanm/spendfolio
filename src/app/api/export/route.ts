@@ -154,24 +154,79 @@ export async function GET(request: Request) {
       return toDownloadResponse(workbook, `spendfolio-${type}-${today}.xlsx`);
     }
 
-    const [profile, expenses] = await Promise.all([
-      prisma.houseProfile.findFirst({ where: { userId: user.id }, orderBy: { createdAt: "asc" } }),
+    const [profiles, expenses] = await Promise.all([
+      prisma.houseProfile.findMany({ where: { userId: user.id }, orderBy: { createdAt: "asc" } }),
       prisma.houseExpense.findMany({ where: { userId: user.id }, orderBy: [{ date: "asc" }, { createdAt: "asc" }] }),
     ]);
-    const details = parseHouseDetails(profile?.loanDetails);
-    appendSheet(workbook, [{
-      Name: profile?.name ?? "",
-      Address: profile?.address ?? "",
-      PurchaseDate: profile?.purchaseDate ?? "",
-      PurchasePrice: profile?.purchasePrice ?? "",
-      DownPaymentTarget: details.downPaymentTarget ?? "",
-      DownPaymentPaid: details.downPaymentPaid ?? "",
-      LoanSanctionedAmount: details.loanSanctionedAmount ?? "",
-      LoanOutstandingAmount: details.loanOutstandingAmount ?? "",
-      OutstandingEmiMonths: details.outstandingEmiMonths ?? "",
-    }], "Profile");
-    appendSheet(workbook, details.contacts.length > 0 ? details.contacts.map((contact) => ({ Department: contact.department, Person: contact.person, Phone: contact.phone, Email: contact.email, Notes: contact.notes })) : [{ Department: "", Person: "", Phone: "", Email: "", Notes: "" }], "Contacts");
-    appendSheet(workbook, expenses.length > 0 ? expenses.map((expense) => ({ Date: expense.date, Category: expense.category, Amount: expense.amount, Recurring: expense.recurring ? "Yes" : "No", Note: expense.note, CreatedAt: expense.createdAt.toISOString(), UpdatedAt: expense.updatedAt.toISOString() })) : [{ Date: "", Category: "", Amount: "", Recurring: "", Note: "" }], "Expenses");
+    const nameById = new Map(profiles.map((profile) => [profile.id, profile.name]));
+    appendSheet(
+      workbook,
+      profiles.length > 0
+        ? profiles.map((profile) => {
+            const details = parseHouseDetails(profile.loanDetails);
+            return {
+              Property: profile.name,
+              Type: profile.propertyType,
+              Address: profile.address,
+              PurchaseDate: profile.purchaseDate ?? "",
+              PurchasePrice: profile.purchasePrice ?? "",
+              CarpetArea: profile.carpetArea ?? "",
+              BuiltupArea: profile.builtupArea ?? "",
+              SuperBuiltupArea: profile.superBuiltupArea ?? "",
+              LandArea: profile.landArea ?? "",
+              UdsPercent: profile.udsPercent ?? "",
+              MonthlyBudget: profile.monthlyBudget ?? "",
+              TdsApplicable: profile.tdsApplicable ? "Yes" : "No",
+              DownPaymentTarget: details.downPaymentTarget ?? "",
+              DownPaymentPercent: details.downPaymentPercent ?? "",
+              CorpusTarget: details.corpusTarget ?? "",
+              TdsTarget: details.tdsTarget ?? "",
+              RegistrationTarget: details.registrationTarget ?? "",
+              StampDutyTarget: details.stampDutyTarget ?? "",
+              LoanBank: details.loan.bank,
+              LoanSanctionedAmount: details.loan.sanctionedAmount ?? "",
+              LoanTenureMonths: details.loan.tenureMonths ?? "",
+              LoanInterestRate: details.loan.interestRate ?? "",
+              LoanOutstandingAmount: details.loan.outstandingAmount ?? "",
+              OutstandingEmiMonths: details.loan.outstandingEmiMonths ?? "",
+            };
+          })
+        : [{ Property: "", Type: "", Address: "" }],
+      "Profile",
+    );
+    const contactRows = profiles.flatMap((profile) => {
+      const details = parseHouseDetails(profile.loanDetails);
+      return details.contacts.length > 0
+        ? details.contacts.map((contact) => ({
+            Property: profile.name,
+            Role: contact.department,
+            Person: contact.person,
+            Phone: contact.phone,
+            Email: contact.email,
+            Notes: contact.notes,
+          }))
+        : [{ Property: profile.name, Role: "", Person: "", Phone: "", Email: "", Notes: "" }];
+    });
+    appendSheet(workbook, contactRows.length > 0 ? contactRows : [{ Property: "", Role: "" }], "Contacts");
+    appendSheet(
+      workbook,
+      expenses.length > 0
+        ? expenses.map((expense) => ({
+            Property: nameById.get(expense.houseId) || "",
+            Date: expense.date,
+            Month: expense.monthKey || expense.date.slice(0, 7),
+            Kind: expense.kind,
+            Category: expense.category,
+            CustomLabel: expense.customLabel,
+            Amount: expense.amount,
+            Recurring: expense.recurring ? "Yes" : "No",
+            Note: expense.note,
+            CreatedAt: expense.createdAt.toISOString(),
+            UpdatedAt: expense.updatedAt.toISOString(),
+          }))
+        : [{ Property: "", Date: "", Category: "", Amount: "" }],
+      "Expenses",
+    );
     return toDownloadResponse(workbook, `spendfolio-house-${today}.xlsx`);
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";

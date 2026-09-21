@@ -75,11 +75,11 @@ export default function AccountPage() {
       if (data.house.expenses.length > 0) {
         lines.push("");
         lines.push("=== HOUSE EXPENSES ===");
-        lines.push("date,category,amount,recurring,note");
+        lines.push("date,propertyId,kind,category,amount,recurring,note");
         lines.push(
           ...data.house.expenses.map(
             (e) =>
-              `${e.date},${JSON.stringify(e.category)},${e.amount},${e.recurring},${JSON.stringify(e.note)}`,
+              `${e.date},${JSON.stringify(e.houseId)},${JSON.stringify(e.kind)},${JSON.stringify(e.category)},${e.amount},${e.recurring},${JSON.stringify(e.note)}`,
           ),
         );
       }
@@ -173,7 +173,7 @@ export default function AccountPage() {
                   <p className="text-xs text-ink-soft">
                     {module === "gold" && "Track gold accumulation, goals, and profit/loss on sales"}
                     {module === "silver" && "Track silver accumulation, goals, and profit/loss on sales"}
-                    {module === "house" && "Track house down payment and expenses"}
+                    {module === "house" && "Track multiple properties, builder payments, living costs, and house contacts"}
                   </p>
                 </div>
               </label>

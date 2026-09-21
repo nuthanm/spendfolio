@@ -137,35 +137,47 @@ model MetalTransaction {
 }
 
 model HouseProfile {
-  id            String   @id @default(cuid())
-  userId        String
-  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  name          String   @default("Main residence")
-  address       String   @default("")
-  purchaseDate  String?
-  purchasePrice Float?
-  loanDetails   String   @default("{}") // JSON
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-  expenses      HouseExpense[]
+  id               String   @id @default(cuid())
+  userId           String
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name             String   @default("Main residence")
+  address          String   @default("")
+  propertyType     String   @default("Apartment") // Apartment | House | Land | Commercial
+  purchaseDate     String?
+  purchasePrice    Float?
+  carpetArea       Float?
+  builtupArea      Float?
+  superBuiltupArea Float?
+  landArea         Float?
+  udsPercent       Float?
+  monthlyBudget    Float?
+  tdsApplicable    Boolean  @default(false)
+  loanDetails      String   @default("{}") // JSON nested document
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  expenses         HouseExpense[]
 
   @@index([userId])
 }
 
 model HouseExpense {
-  id        String       @id @default(cuid())
-  userId    String
-  user      User         @relation(fields: [userId], references: [id], onDelete: Cascade)
-  houseId   String
-  house     HouseProfile @relation(fields: [houseId], references: [id], onDelete: Cascade)
-  date      String
-  category  String
-  amount    Float
-  note      String       @default("")
-  recurring Boolean      @default(false)
-  createdAt DateTime     @default(now())
-  updatedAt DateTime     @updatedAt
+  id          String       @id @default(cuid())
+  userId      String
+  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  houseId     String
+  house       HouseProfile @relation(fields: [houseId], references: [id], onDelete: Cascade)
+  date        String
+  monthKey    String       @default("") // YYYY-MM
+  kind        String       @default("purchase") // purchase | living | maintenance
+  category    String
+  customLabel String       @default("")
+  amount      Float
+  note        String       @default("")
+  recurring   Boolean      @default(false)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
 
   @@index([userId, houseId])
   @@index([userId, date])
+  @@index([userId, houseId, kind, monthKey])
 }
