@@ -59,7 +59,7 @@ export default function LandingPage() {
               Sign in
             </Link>
             <Link href="/dashboard" className="btn-primary px-3 py-2 text-sm">
-              Open prototype
+              Open app
             </Link>
           </div>
         </div>
@@ -85,7 +85,7 @@ export default function LandingPage() {
             </p>
             <div className="anim-rise-delay-3 mt-8 flex flex-wrap items-center gap-3">
               <Link href="/dashboard" className="btn-primary px-6 py-3 text-sm font-medium">
-                Explore the prototype
+                Open dashboard
               </Link>
               <Link href="/login" className="btn-secondary px-6 py-3 text-sm">
                 Login + 2FA
@@ -208,8 +208,8 @@ export default function LandingPage() {
             Experience private monthly tracking today
           </h2>
           <p className="mx-auto mt-4 max-w-xl text-ink-soft">
-            Open the visual prototype — dashboard, income, customizable expenses, import
-            preview, and account controls — then tell us what to refine.
+            Sign in to track income, expenses, renewals, and imports — with account controls
+            and 2FA built in.
           </p>
           <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
             <Link href="/dashboard" className="btn-primary px-7 py-3.5 text-sm font-medium">
@@ -225,7 +225,7 @@ export default function LandingPage() {
       <footer className="border-t border-line/60 bg-white/30">
         <div className="mx-auto flex max-w-6xl flex-col gap-4 px-5 py-8 text-sm text-ink-soft sm:flex-row sm:items-center sm:justify-between">
           <p className="font-bold text-ink">Spendfolio</p>
-          <p className="font-mono text-xs">Prototype · your ledger, your math</p>
+          <p className="font-mono text-xs">Your ledger · your math</p>
           <div className="flex gap-4">
             <Link href="/account" className="hover:text-ink">
               Account
