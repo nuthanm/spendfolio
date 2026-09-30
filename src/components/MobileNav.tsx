@@ -109,18 +109,11 @@ export function MobileNav({ items }: { items: NavItem[] }) {
         onClick={() => setOpen((value) => !value)}
       >
         <span className="sr-only">Menu</span>
-        {open ? (
-          <span aria-hidden className="relative block h-4 w-4">
-            <span className="absolute left-0 top-1/2 block h-0.5 w-full -translate-y-1/2 rotate-45 bg-current" />
-            <span className="absolute left-0 top-1/2 block h-0.5 w-full -translate-y-1/2 -rotate-45 bg-current" />
-          </span>
-        ) : (
-          <span aria-hidden className="flex w-4 flex-col gap-1.5">
-            <span className="block h-0.5 w-full bg-current" />
-            <span className="block h-0.5 w-full bg-current" />
-            <span className="block h-0.5 w-full bg-current" />
-          </span>
-        )}
+        <span aria-hidden className="flex w-4 flex-col gap-1.5">
+          <span className="block h-0.5 w-full bg-current" />
+          <span className="block h-0.5 w-full bg-current" />
+          <span className="block h-0.5 w-full bg-current" />
+        </span>
       </button>
       {menu}
     </div>
