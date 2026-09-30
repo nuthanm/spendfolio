@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { FormulaField } from "@/components/FormulaField";
+import { LandingHeader } from "@/components/LandingHeader";
 import { HeroLedgerVisual, LandingFaq } from "@/components/LandingExtras";
 
 const FEATURES = [
@@ -34,46 +35,17 @@ export default function LandingPage() {
     <div className="relative min-h-screen formula-wash">
       <FormulaField />
 
-      {/* Nav */}
-      <header className="sticky top-0 z-40 border-b border-line/50 bg-paper/80 backdrop-blur-md">
-        <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-5 py-4">
-          <a href="#home" className="text-lg font-bold tracking-tight text-ink">
-            Spendfolio
-          </a>
-          <nav className="hidden items-center gap-7 text-sm text-ink-soft md:flex">
-            <a href="#features" className="hover:text-ink">
-              Features
-            </a>
-            <a href="#privacy" className="hover:text-ink">
-              Privacy
-            </a>
-            <a href="#faq" className="hover:text-ink">
-              FAQ
-            </a>
-            <a href="#start" className="hover:text-ink">
-              Start
-            </a>
-          </nav>
-          <div className="flex items-center gap-2">
-            <Link href="/login" className="btn-secondary px-3 py-2 text-sm">
-              Sign in
-            </Link>
-            <Link href="/dashboard" className="btn-primary px-3 py-2 text-sm">
-              Open prototype
-            </Link>
-          </div>
-        </div>
-      </header>
+      <LandingHeader />
 
-      {/* Hero — Numora-style split: copy left, product visual right */}
+      {/* Hero — stacks until xl so the title never collides with the ledger card */}
       <section id="home" className="relative overflow-hidden">
         <div className="ledger-grid absolute inset-0 opacity-30" />
-        <div className="relative z-10 mx-auto grid max-w-6xl items-center gap-12 px-5 pb-20 pt-14 lg:grid-cols-2 lg:gap-16 lg:pb-28 lg:pt-20">
-          <div>
+        <div className="relative z-10 mx-auto grid max-w-6xl items-center gap-10 px-5 pb-20 pt-14 md:gap-12 xl:grid-cols-2 xl:gap-16 xl:pb-28 xl:pt-20">
+          <div className="min-w-0">
             <p className="anim-rise mb-4 font-mono text-xs uppercase tracking-[0.22em] text-mint">
               private ledger · monthly math
             </p>
-            <h1 className="anim-rise-delay-1 text-5xl font-extrabold leading-[0.95] tracking-tight text-ink md:text-6xl lg:text-7xl">
+            <h1 className="anim-rise-delay-1 text-4xl font-extrabold leading-[0.95] tracking-tight text-ink sm:text-5xl md:text-6xl xl:text-7xl">
               Spendfolio
             </h1>
             <p className="anim-rise-delay-2 mt-5 max-w-md text-xl font-semibold leading-snug text-ink">
@@ -85,7 +57,7 @@ export default function LandingPage() {
             </p>
             <div className="anim-rise-delay-3 mt-8 flex flex-wrap items-center gap-3">
               <Link href="/dashboard" className="btn-primary px-6 py-3 text-sm font-medium">
-                Explore the prototype
+                Open dashboard
               </Link>
               <Link href="/login" className="btn-secondary px-6 py-3 text-sm">
                 Login + 2FA
@@ -93,7 +65,7 @@ export default function LandingPage() {
             </div>
           </div>
 
-          <div className="anim-rise-delay-2">
+          <div className="anim-rise-delay-2 min-w-0 justify-self-center xl:justify-self-end">
             <HeroLedgerVisual />
           </div>
         </div>
@@ -208,8 +180,8 @@ export default function LandingPage() {
             Experience private monthly tracking today
           </h2>
           <p className="mx-auto mt-4 max-w-xl text-ink-soft">
-            Open the visual prototype — dashboard, income, customizable expenses, import
-            preview, and account controls — then tell us what to refine.
+            Sign in to track income, expenses, renewals, and imports — with account controls
+            and 2FA built in.
           </p>
           <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
             <Link href="/dashboard" className="btn-primary px-7 py-3.5 text-sm font-medium">
@@ -225,7 +197,7 @@ export default function LandingPage() {
       <footer className="border-t border-line/60 bg-white/30">
         <div className="mx-auto flex max-w-6xl flex-col gap-4 px-5 py-8 text-sm text-ink-soft sm:flex-row sm:items-center sm:justify-between">
           <p className="font-bold text-ink">Spendfolio</p>
-          <p className="font-mono text-xs">Prototype · your ledger, your math</p>
+          <p className="font-mono text-xs">Your ledger · your math</p>
           <div className="flex gap-4">
             <Link href="/account" className="hover:text-ink">
               Account

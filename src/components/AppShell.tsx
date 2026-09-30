@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 import { logoutAction } from "@/lib/actions/auth";
 import { getEnabledModules } from "@/lib/actions/modules";
 import { MODULE_ROUTES, type WealthModule } from "@/lib/modules";
+import { MobileNav } from "@/components/MobileNav";
 
 const BASE_NAV = [
   { href: "/dashboard", label: "Dashboard" },
@@ -59,24 +60,14 @@ export function AppShell({
               </Link>
             ))}
           </nav>
-          <form action={logoutAction}>
-            <button type="submit" className="btn-secondary px-3 py-1.5 text-xs">
-              Log out
-            </button>
-          </form>
-        </div>
-        <div className="flex gap-3 overflow-x-auto border-t border-line/40 px-5 py-2 md:hidden">
-          {nav.map((item) => (
-            <Link
-              key={item.href}
-              href={item.href}
-              className={`whitespace-nowrap text-xs ${
-                pathname === item.href ? "text-mint" : "text-ink-soft"
-              }`}
-            >
-              {item.label}
-            </Link>
-          ))}
+          <div className="flex items-center gap-2">
+            <MobileNav items={nav} />
+            <form action={logoutAction}>
+              <button type="submit" className="btn-secondary px-3 py-1.5 text-xs">
+                Log out
+              </button>
+            </form>
+          </div>
         </div>
       </header>
 

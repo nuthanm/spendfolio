@@ -6,7 +6,7 @@ import { TypingEquation } from "@/components/TypingEquation";
 
 export function HeroLedgerVisual() {
   return (
-    <div className="relative mx-auto w-full max-w-md">
+    <div className="relative mx-auto w-full max-w-md overflow-hidden">
       <div
         className="absolute -inset-6 -z-10 rounded-[2rem] opacity-70"
         style={{
