@@ -7,7 +7,14 @@ import { usePathname } from "next/navigation";
 
 type NavItem = { href: string; label: string };
 
-export function MobileNav({ items }: { items: NavItem[] }) {
+export function MobileNav({
+  items,
+  breakpointClassName = "md:hidden",
+}: {
+  items: NavItem[];
+  /** Wrapper visibility — e.g. `md:hidden` or `xl:hidden`. */
+  breakpointClassName?: string;
+}) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
@@ -98,7 +105,7 @@ export function MobileNav({ items }: { items: NavItem[] }) {
       : null;
 
   return (
-    <div className="md:hidden">
+    <div className={breakpointClassName}>
       <button
         ref={openRef}
         type="button"
