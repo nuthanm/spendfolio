@@ -69,3 +69,5 @@ Open [http://localhost:3000](http://localhost:3000). Create an account from `/lo
 - `npm run build` — production build
 - `npm run db:deploy` — apply migrations
 - `npm run db:seed` — seed demo data
+
+## Copywright: Nuthan Murarysetty
