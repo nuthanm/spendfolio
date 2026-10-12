@@ -12,7 +12,7 @@ import {
   updateExpense,
 } from "@/lib/actions/expenses";
 import { DEFAULT_EXPENSE_LABELS, formatINR } from "@/lib/finance";
-import { currentMonthKey } from "@/lib/dates";
+import { currentMonthKey, formatMonthLabel } from "@/lib/dates";
 
 type Expense = Awaited<ReturnType<typeof listExpenses>>[number];
 type FieldDef = Awaited<ReturnType<typeof listFieldDefs>>[number];
@@ -41,6 +41,17 @@ function isPresetLabel(label: string) {
   return (DEFAULT_EXPENSE_LABELS as readonly string[]).includes(label);
 }
 
+function monthOptions() {
+  const now = new Date();
+  const options: { key: string; label: string }[] = [];
+  for (let i = -24; i <= 12; i++) {
+    const d = new Date(now.getFullYear(), now.getMonth() + i, 1);
+    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+    options.push({ key, label: formatMonthLabel(key) });
+  }
+  return options.reverse();
+}
+
 export default function ExpensesPage() {
   const [rows, setRows] = useState<Expense[]>([]);
   const [defs, setDefs] = useState<FieldDef[]>([]);
@@ -51,11 +62,23 @@ export default function ExpensesPage() {
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
   const [query, setQuery] = useState("");
-  const month = useMemo(() => currentMonthKey(), []);
+  const [selectedMonthKey, setSelectedMonthKey] = useState(() => currentMonthKey());
+  const [loadedMonthKey, setLoadedMonthKey] = useState<string | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
+  const months = useMemo(() => monthOptions(), []);
+  const selectedMonthLabel = useMemo(
+    () => formatMonthLabel(selectedMonthKey),
+    [selectedMonthKey],
+  );
+  const monthReady = loadedMonthKey === selectedMonthKey;
+  const monthRows = useMemo(
+    () => (monthReady ? rows : []),
+    [monthReady, rows],
+  );
 
   const filteredRows = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return rows;
+    if (!q) return monthRows;
 
     const digits = q.replace(/[^\d.]/g, "");
 
@@ -77,19 +100,30 @@ export default function ExpensesPage() {
       if (digits && String(e.amount).includes(digits)) return true;
       return false;
     });
-  }, [rows, query]);
+  }, [monthRows, query]);
 
   function refresh() {
-    startTransition(async () => {
-      const [e, f] = await Promise.all([listExpenses(month), listFieldDefs()]);
-      setRows(e);
-      setDefs(f);
-    });
+    setReloadKey((key) => key + 1);
   }
 
   useEffect(() => {
-    refresh();
-  }, []);
+    let active = true;
+    startTransition(async () => {
+      const [e, f] = await Promise.all([listExpenses(selectedMonthKey), listFieldDefs()]);
+      if (!active) return;
+      setRows(e);
+      setDefs(f);
+      setLoadedMonthKey(selectedMonthKey);
+    });
+    return () => {
+      active = false;
+    };
+  }, [selectedMonthKey, reloadKey]);
+
+  const monthTotal = useMemo(
+    () => monthRows.reduce((sum, row) => sum + row.amount, 0),
+    [monthRows],
+  );
 
   function startEdit(expense: Expense) {
     const preset = isPresetLabel(expense.label);
@@ -157,6 +191,40 @@ export default function ExpensesPage() {
       title="Add expense"
       subtitle="Edit any entry. Mark recurring with a next date — those highlight in orange and appear on the dashboard."
     >
+      <div className="mb-6 border border-line bg-white/50 p-5 anim-rise">
+        <div className="flex flex-wrap items-end justify-between gap-4">
+          <div>
+            <p className="font-mono text-[11px] uppercase tracking-wider text-ink-soft">
+              Month view
+            </p>
+            <p className="mt-2 text-3xl font-bold text-coral number-tick">
+              {monthReady ? formatINR(monthTotal) : "…"}
+            </p>
+            <p className="mt-2 text-sm text-ink-soft">
+              {monthReady
+                ? `${selectedMonthLabel} · ${monthRows.length} ${monthRows.length === 1 ? "entry" : "entries"}`
+                : `Loading ${selectedMonthLabel}…`}
+            </p>
+          </div>
+          <label className="block w-full min-w-0 sm:w-52">
+            <span className="mb-1 block font-mono text-[11px] uppercase tracking-wider text-ink-soft">
+              Month
+            </span>
+            <select
+              className="field"
+              value={selectedMonthKey}
+              onChange={(e) => setSelectedMonthKey(e.target.value)}
+            >
+              {months.map((month) => (
+                <option key={month.key} value={month.key}>
+                  {month.label}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+      </div>
+
       <div className="grid gap-8 lg:grid-cols-[1fr_1fr]">
         <div className="anim-rise">
           <form className="border border-line bg-white/50 p-5" onSubmit={onSubmit}>
@@ -416,7 +484,7 @@ export default function ExpensesPage() {
 
         <div className="anim-rise-delay-1">
           <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
-            <h2 className="text-lg font-bold text-ink">This month&apos;s entries</h2>
+            <h2 className="text-lg font-bold text-ink">{selectedMonthLabel} entries</h2>
             <label className="relative block w-full max-w-xs">
               <span className="sr-only">Search entries</span>
               <input
@@ -428,7 +496,8 @@ export default function ExpensesPage() {
             </label>
           </div>
           <ul className="max-h-[640px] space-y-2 overflow-y-auto pr-1">
-            {filteredRows.map((e) => (
+            {monthReady
+              ? filteredRows.map((e) => (
               <li
                 key={e.id}
                 className={`border border-line bg-white/50 px-4 py-3 ${
@@ -440,7 +509,7 @@ export default function ExpensesPage() {
                 }`}
               >
                 <div className="flex items-start justify-between gap-3">
-                  <div>
+                  <div className="min-w-0">
                     <p className="font-medium text-ink">
                       {e.label}{" "}
                       <span className="font-mono text-xs font-normal text-ink-soft">{e.date}</span>
@@ -456,7 +525,7 @@ export default function ExpensesPage() {
                       </p>
                     ) : null}
                   </div>
-                  <div className="text-right">
+                  <div className="shrink-0 text-right">
                     <p className="font-mono text-sm font-semibold">{formatINR(e.amount)}</p>
                     <div className="mt-1 flex justify-end gap-2">
                       <button
@@ -483,10 +552,13 @@ export default function ExpensesPage() {
                   </div>
                 </div>
               </li>
-            ))}
-            {rows.length === 0 ? (
-              <li className="text-sm text-ink-soft">No expenses this month yet.</li>
-            ) : filteredRows.length === 0 ? (
+            ))
+              : (
+              <li className="text-sm text-ink-soft">Loading {selectedMonthLabel}…</li>
+            )}
+            {monthReady && monthRows.length === 0 ? (
+              <li className="text-sm text-ink-soft">No expenses for {selectedMonthLabel} yet.</li>
+            ) : monthReady && filteredRows.length === 0 ? (
               <li className="text-sm text-ink-soft">No entries match {query.trim()}.</li>
             ) : null}
           </ul>

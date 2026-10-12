@@ -51,6 +51,31 @@ function monthKeyFromValue(value: string | Date | null | undefined) {
   return currentMonthKey(new Date(value));
 }
 
+function sourceBelongsToMonth(
+  source: { recurring: boolean; createdAt: string | Date; monthKey: string | null },
+  monthKey: string,
+  hasOverride: boolean,
+) {
+  if (source.recurring) {
+    if (hasOverride) return true;
+    const start = monthKeyFromValue(source.createdAt);
+    if (!start) return true;
+    return monthKey >= start;
+  }
+  return source.monthKey === monthKey;
+}
+
+function amountForMonth(
+  source: { recurring: boolean; createdAt: string | Date; amount: number },
+  monthKey: string,
+  overrideAmount: number | undefined,
+) {
+  if (!source.recurring) return source.amount;
+  const start = monthKeyFromValue(source.createdAt);
+  if (overrideAmount === undefined && start && monthKey < start) return 0;
+  return overrideAmount ?? source.amount;
+}
+
 export default function IncomePage() {
   const [sources, setSources] = useState<Source[]>([]);
   const [overrides, setOverrides] = useState<Override[]>([]);
@@ -76,12 +101,17 @@ export default function IncomePage() {
       ),
     [overrides, selectedMonthKey],
   );
+  const visibleSources = useMemo(
+    () =>
+      sources.filter((source) =>
+        sourceBelongsToMonth(source, selectedMonthKey, selectedMonthOverrides.has(source.id)),
+      ),
+    [sources, selectedMonthKey, selectedMonthOverrides],
+  );
   const selectedMonthRecurringTotal = useMemo(() => {
     return recurringSources.reduce((sum, source) => {
       const override = selectedMonthOverrides.get(source.id);
-      const sourceStartMonth = monthKeyFromValue(source.createdAt);
-      if (!override && sourceStartMonth && selectedMonthKey < sourceStartMonth) return sum;
-      return sum + (override?.amount ?? source.amount);
+      return sum + amountForMonth(source, selectedMonthKey, override?.amount);
     }, 0);
   }, [recurringSources, selectedMonthOverrides, selectedMonthKey]);
   const selectedMonthOneTimeTotal = useMemo(
@@ -226,7 +256,7 @@ export default function IncomePage() {
               {selectedMonthLabel} · Recurring {formatINR(selectedMonthRecurringTotal)} · One-time {formatINR(selectedMonthOneTimeTotal)}
             </p>
           </div>
-          <label className="block min-w-52">
+          <label className="block w-full min-w-0 sm:w-52">
             <span className="mb-1 block font-mono text-[11px] uppercase tracking-wider text-ink-soft">
               Month
             </span>
@@ -255,11 +285,13 @@ export default function IncomePage() {
       </div>
 
       <div className="grid gap-8 lg:grid-cols-[1.2fr_0.8fr]">
-        <ul className="space-y-2 anim-rise-delay-2">
-          {sources.map((s) => (
+        <div className="anim-rise-delay-2">
+          <h2 className="mb-3 text-lg font-bold text-ink">Sources for {selectedMonthLabel}</h2>
+          <ul className="space-y-2">
+          {visibleSources.map((s) => (
             <li key={s.id} className="border border-line bg-white/50 px-4 py-4">
               <div className="flex flex-wrap items-start justify-between gap-3">
-                <div>
+                <div className="min-w-0">
                   <p className="font-medium text-ink">{s.name}</p>
                   <p className="mt-1 font-mono text-xs text-ink-soft">
                     {s.recurring ? (
@@ -275,8 +307,10 @@ export default function IncomePage() {
                     )}
                   </p>
                 </div>
-                <div className="flex items-center gap-3">
-                  <p className="font-mono text-lg font-semibold">{formatINR(s.amount)}</p>
+                <div className="flex shrink-0 items-center gap-3">
+                  <p className="font-mono text-lg font-semibold">
+                    {formatINR(amountForMonth(s, selectedMonthKey, selectedMonthOverrides.get(s.id)?.amount))}
+                  </p>
                   <button
                     type="button"
                     className="text-xs text-mint"
@@ -315,20 +349,13 @@ export default function IncomePage() {
                             : "Changes here only affect the selected month."}
                       </p>
                     </div>
-                    <p className="font-mono text-sm font-semibold text-ink">
-                      {formatINR(
-                        (() => {
-                          const override = selectedMonthOverrides.get(s.id);
-                          const sourceStartMonth = monthKeyFromValue(s.createdAt);
-                          if (!override && sourceStartMonth && selectedMonthKey < sourceStartMonth) return 0;
-                          return override?.amount ?? s.amount;
-                        })(),
-                      )}
+                      <p className="font-mono text-sm font-semibold text-ink">
+                      {formatINR(amountForMonth(s, selectedMonthKey, selectedMonthOverrides.get(s.id)?.amount))}
                     </p>
                   </div>
 
                   <div className="mt-3 flex flex-wrap items-end gap-3">
-                    <label className="block min-w-52 flex-1">
+                    <label className="block w-full min-w-0 flex-1 sm:min-w-52">
                       <span className="mb-1 block font-mono text-[11px] uppercase tracking-wider text-ink-soft">
                         Month value (₹)
                       </span>
@@ -367,10 +394,15 @@ export default function IncomePage() {
               ) : null}
             </li>
           ))}
-          {sources.length === 0 ? (
-            <li className="text-sm text-ink-soft">No income sources yet.</li>
+          {visibleSources.length === 0 ? (
+            <li className="text-sm text-ink-soft">
+              {sources.length === 0
+                ? "No income sources yet."
+                : `No income sources for ${selectedMonthLabel}.`}
+            </li>
           ) : null}
-        </ul>
+          </ul>
+        </div>
 
         <form
           className="border border-line bg-white/50 p-5 anim-rise-delay-3"

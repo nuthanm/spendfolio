@@ -37,7 +37,7 @@ export function TypingEquation() {
   }, [chars, phase, current.length]);
 
   return (
-    <p className="typing-caret font-mono text-sm text-mint md:text-base">
+    <p className="typing-caret max-w-full font-mono text-sm text-mint lg:text-base">
       {current.slice(0, chars)}
     </p>
   );

@@ -41,7 +41,7 @@ export function AppShell({
   return (
     <div className="formula-wash min-h-screen">
       <header className="border-b border-line/60 bg-white/40 backdrop-blur-md">
-        <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-5 py-4">
+        <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-5 py-3 sm:py-4">
           <Link
             href="/dashboard"
             className="font-[family-name:var(--font-display)] text-xl font-bold tracking-tight text-ink"
@@ -71,7 +71,7 @@ export function AppShell({
         </div>
       </header>
 
-      <main className="mx-auto max-w-6xl px-5 py-8">
+      <main className="mx-auto min-w-0 max-w-6xl px-5 py-6 sm:py-8">
         <div className="mb-8 anim-rise">
           <h1 className="text-3xl font-bold tracking-tight text-ink md:text-4xl">{title}</h1>
           {subtitle ? <p className="mt-2 max-w-2xl text-ink-soft">{subtitle}</p> : null}

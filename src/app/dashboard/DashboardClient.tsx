@@ -113,10 +113,10 @@ export default function DashboardClient() {
       title="Dashboard"
       subtitle="Live monthly math — income, spend, buffer, and renewals that need attention."
     >
-      <div className="mb-6 flex flex-wrap items-center justify-between gap-3 anim-rise">
-        <div className="flex flex-wrap items-center gap-3">
-          <label className="flex items-center gap-3">
-            <span className="font-mono text-[11px] uppercase tracking-wider text-ink-soft">
+      <div className="mb-6 flex flex-col gap-3 anim-rise sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
+        <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
+          <label className="flex min-w-0 items-center gap-3">
+            <span className="shrink-0 font-mono text-[11px] uppercase tracking-wider text-ink-soft">
               Month
             </span>
             <select
@@ -138,8 +138,8 @@ export default function DashboardClient() {
             </select>
           </label>
 
-          <label className="flex items-center gap-3">
-            <span className="font-mono text-[11px] uppercase tracking-wider text-ink-soft">
+          <label className="flex min-w-0 items-center gap-3">
+            <span className="shrink-0 font-mono text-[11px] uppercase tracking-wider text-ink-soft">
               Financial year
             </span>
             <select
@@ -255,7 +255,7 @@ export default function DashboardClient() {
       </section>
 
       <section className="mt-10 anim-rise-delay-2">
-        <div className="mb-4 flex items-end justify-between gap-4">
+        <div className="mb-4 flex flex-wrap items-end justify-between gap-2">
           <h2 className="text-xl font-bold text-ink">Month on month profit / loss</h2>
           <p className="font-mono text-xs text-ink-soft">ledger view · {data.financialYear.selectedLabel}</p>
         </div>
@@ -264,7 +264,7 @@ export default function DashboardClient() {
 
       {data.recurringTiles.length > 0 ? (
         <section className="mt-10 anim-rise-delay-2">
-          <div className="mb-4 flex items-end justify-between gap-4">
+          <div className="mb-4 flex flex-wrap items-end justify-between gap-2">
             <h2 className="text-xl font-bold text-ink">Upcoming recurring</h2>
             <p className="font-mono text-xs text-[#c45f12]">orange · click card to edit</p>
           </div>
@@ -406,7 +406,7 @@ export default function DashboardClient() {
       ) : null}
 
       <section className="mt-10 anim-rise-delay-2">
-        <div className="mb-4 flex items-end justify-between gap-4">
+        <div className="mb-4 flex flex-wrap items-end justify-between gap-2">
           <h2 className="text-xl font-bold text-ink">Where money went</h2>
           <p className="font-mono text-xs text-ink-soft">
             hover or tap a tile · {data.monthLabel}
@@ -483,8 +483,8 @@ export default function DashboardClient() {
                         : ""
                   }`}
                 >
-                  <div className="flex items-center justify-between gap-3">
-                    <div>
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
                       <p className="font-medium text-ink">{r.title}</p>
                       <p className="font-mono text-xs text-ink-soft">
                         due {r.due}
@@ -495,7 +495,7 @@ export default function DashboardClient() {
                         <p className="mt-1 text-sm text-ink-soft">{r.remarks}</p>
                       ) : null}
                     </div>
-                    <p className="font-mono font-medium text-ink">{formatINR(r.amount)}</p>
+                    <p className="shrink-0 font-mono font-medium text-ink">{formatINR(r.amount)}</p>
                   </div>
                 </li>
               ))}
@@ -521,7 +521,7 @@ export default function DashboardClient() {
                   }`}
                 >
                   <div className="flex items-start justify-between gap-3">
-                    <div>
+                    <div className="min-w-0">
                       <p className="font-medium text-ink">
                         {e.label}{" "}
                         <span className="font-mono text-xs font-normal text-ink-soft">

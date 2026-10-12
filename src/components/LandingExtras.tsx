@@ -6,9 +6,9 @@ import { TypingEquation } from "@/components/TypingEquation";
 
 export function HeroLedgerVisual() {
   return (
-    <div className="relative mx-auto w-full max-w-md overflow-hidden">
+    <div className="relative mx-auto w-full min-w-0 max-w-md overflow-hidden">
       <div
-        className="absolute -inset-6 -z-10 rounded-[2rem] opacity-70"
+        className="pointer-events-none absolute inset-x-0 -top-3 bottom-1 -z-10 rounded-[2rem] opacity-70"
         style={{
           background:
             "radial-gradient(circle at 30% 20%, rgba(36,176,137,0.25), transparent 55%), radial-gradient(circle at 80% 80%, rgba(184,137,45,0.18), transparent 50%)",
@@ -24,7 +24,7 @@ export function HeroLedgerVisual() {
         <div className="space-y-4 p-5">
           <TypingEquation />
 
-          <div className="grid grid-cols-3 gap-3 border-y border-line/60 py-4">
+          <div className="grid grid-cols-3 gap-2 border-y border-line/60 py-4 sm:gap-3">
             <MiniStat label="Income" value={98600} />
             <MiniStat label="Spent" value={44160} />
             <MiniStat label="Buffer" value={54440} mint />
@@ -77,7 +77,7 @@ function MiniStat({
   return (
     <div>
       <p className="font-mono text-[9px] uppercase tracking-wider text-ink-soft">{label}</p>
-      <p className={`mt-1 text-sm font-bold number-tick ${mint ? "text-mint" : "text-ink"}`}>
+      <p className={`mt-1 text-xs font-bold number-tick sm:text-sm ${mint ? "text-mint" : "text-ink"}`}>
         <AnimatedNumber value={value} prefix="₹" duration={1600} />
       </p>
     </div>

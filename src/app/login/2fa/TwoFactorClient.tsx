@@ -22,6 +22,21 @@ export default function TwoFactorClient() {
     }
   }, [isSetup]);
 
+  useEffect(() => {
+    const first = refs.current[0];
+    if (!first) return;
+
+    const active = document.activeElement;
+    const focusIsElsewhere =
+      active instanceof HTMLElement &&
+      active !== document.body &&
+      active !== document.documentElement &&
+      active !== first;
+
+    if (focusIsElsewhere) return;
+    first.focus();
+  }, []);
+
   function updateDigit(index: number, value: string) {
     const v = value.replace(/\D/g, "").slice(-1);
     const next = [...digits];
@@ -67,14 +82,14 @@ export default function TwoFactorClient() {
         ) : null}
 
         <form onSubmit={onSubmit} className="mt-8 anim-rise-delay-2">
-          <div className="flex gap-2">
+          <div className="grid grid-cols-6 gap-2">
             {digits.map((d, i) => (
               <input
                 key={i}
                 ref={(el) => {
                   refs.current[i] = el;
                 }}
-                className="field h-14 w-12 text-center font-mono text-xl"
+                className="field h-12 min-w-0 px-0 text-center font-mono text-lg sm:h-14 sm:text-xl"
                 inputMode="numeric"
                 maxLength={1}
                 value={d}
