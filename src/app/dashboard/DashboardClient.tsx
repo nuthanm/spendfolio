@@ -166,11 +166,11 @@ export default function DashboardClient() {
         </span>
       </div>
 
-      <section className="grid gap-4 md:grid-cols-4 anim-rise-delay-1">
+      <section className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4 anim-rise-delay-1">
         <Stat label="Income" value={data.incomeTotal} note="all sources" />
         <Stat label="Expenses" value={data.expenseTotal} note="this month" />
         <Stat label="Buffer" value={data.health.balance} note="income − expenses" accent />
-        <div className="border border-line bg-white/50 p-5">
+        <div className="summary-tile border border-line bg-white/50 p-5">
           <p className="font-mono text-[11px] uppercase tracking-wider text-ink-soft">Status</p>
           <p
             className={`mt-3 inline-block px-3 py-1 text-sm font-semibold status-${data.health.status}`}
@@ -182,7 +182,7 @@ export default function DashboardClient() {
       </section>
 
       {data.house.currentMonthExpenses > 0 || data.house.totalExpenses > 0 || data.house.loanInfo.sanctioned > 0 ? (
-        <section className="mt-6 grid gap-4 md:grid-cols-4 anim-rise-delay-1">
+        <section className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4 anim-rise-delay-1">
           {data.house.currentMonthExpenses > 0 ? (
             <Stat label="House (Current Month)" value={data.house.currentMonthExpenses} note="this month" />
           ) : null}
@@ -190,16 +190,18 @@ export default function DashboardClient() {
             <Stat label="House (Total)" value={data.house.totalExpenses} note="all months" />
           ) : null}
           {data.house.loanInfo.sanctioned > 0 ? (
-            <div className="border border-line bg-white/50 p-5">
+            <div className="summary-tile border border-line bg-white/50 p-5">
               <p className="font-mono text-[11px] uppercase tracking-wider text-ink-soft">Loan Outstanding</p>
               <p className="mt-3 font-mono text-sm text-ink">
-                {formatINR(data.house.loanInfo.outstanding)} / {formatINR(data.house.loanInfo.sanctioned)}
+                <span className="whitespace-nowrap">{formatINR(data.house.loanInfo.outstanding)}</span>
+                {" / "}
+                <span className="whitespace-nowrap">{formatINR(data.house.loanInfo.sanctioned)}</span>
               </p>
               <p className="mt-1 text-xs text-ink-soft">{data.house.loanInfo.percentagePending}% pending</p>
             </div>
           ) : null}
           {data.house.loanInfo.emorTotal > 0 ? (
-            <div className="border border-line bg-white/50 p-5">
+            <div className="summary-tile border border-line bg-white/50 p-5">
               <p className="font-mono text-[11px] uppercase tracking-wider text-ink-soft">EMI Remaining</p>
               <p className="mt-3 font-mono text-sm text-ink">
                 {data.house.loanInfo.emorOutstanding} / {data.house.loanInfo.emorTotal}
@@ -217,38 +219,40 @@ export default function DashboardClient() {
             Apr to Mar view across {data.financialYear.months.length} months
           </p>
         </div>
-        <div className="grid gap-4 md:grid-cols-4">
-          <div className="border border-mint/35 bg-gradient-to-b from-white/80 to-mint/5 p-5 shadow-[0_10px_24px_rgba(26,143,110,0.08)]">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
+          <div className="summary-tile border border-mint/35 bg-gradient-to-b from-white/80 to-mint/5 p-5 shadow-[0_10px_24px_rgba(26,143,110,0.08)]">
             <p className="font-mono text-[11px] uppercase tracking-wider text-mint">FY Income</p>
-            <p className="mt-3 text-3xl font-bold number-tick text-mint">
+            <p className="summary-value number-tick mt-3 font-bold text-mint">
               <AnimatedNumber value={data.financialYear.totals.income} format={(n) => formatINR(n)} />
             </p>
             <p className="mt-2 font-mono text-xs text-ink-soft">{data.financialYear.months.length}-month inflow</p>
           </div>
-          <div className="border border-coral/35 bg-gradient-to-b from-white/80 to-coral/5 p-5 shadow-[0_10px_24px_rgba(212,85,58,0.08)]">
+          <div className="summary-tile border border-coral/35 bg-gradient-to-b from-white/80 to-coral/5 p-5 shadow-[0_10px_24px_rgba(212,85,58,0.08)]">
             <p className="font-mono text-[11px] uppercase tracking-wider text-coral">FY Expenses</p>
-            <p className="mt-3 text-3xl font-bold number-tick text-coral">
+            <p className="summary-value number-tick mt-3 font-bold text-coral">
               <AnimatedNumber value={data.financialYear.totals.expense} format={(n) => formatINR(n)} />
             </p>
             <p className="mt-2 font-mono text-xs text-ink-soft">{data.financialYear.months.length}-month outflow</p>
           </div>
-          <div className={`border p-5 shadow-[0_10px_24px_rgba(20,36,30,0.08)] ${data.financialYear.totals.profit >= 0 ? "border-mint/35 bg-gradient-to-b from-white/80 to-mint/5" : "border-coral/35 bg-gradient-to-b from-white/80 to-coral/5"}`}>
+          <div className={`summary-tile border p-5 shadow-[0_10px_24px_rgba(20,36,30,0.08)] ${data.financialYear.totals.profit >= 0 ? "border-mint/35 bg-gradient-to-b from-white/80 to-mint/5" : "border-coral/35 bg-gradient-to-b from-white/80 to-coral/5"}`}>
             <p className="font-mono text-[11px] uppercase tracking-wider text-ink-soft">FY P/L</p>
-            <p className={`mt-3 text-3xl font-bold number-tick ${data.financialYear.totals.profit >= 0 ? "text-mint" : "text-coral"}`}>
+            <p className={`summary-value number-tick mt-3 font-bold ${data.financialYear.totals.profit >= 0 ? "text-mint" : "text-coral"}`}>
               <AnimatedNumber value={data.financialYear.totals.profit} format={(n) => formatINR(n)} />
             </p>
             <p className="mt-2 font-mono text-xs text-ink-soft">Net position</p>
           </div>
-          <div className="border border-line bg-white/75 p-5 shadow-[0_10px_24px_rgba(20,36,30,0.05)]">
+          <div className="summary-tile border border-line bg-white/75 p-5 shadow-[0_10px_24px_rgba(20,36,30,0.05)]">
             <p className="font-mono text-[11px] uppercase tracking-wider text-ink-soft">FY Trend</p>
             <p className="mt-2 font-mono text-sm text-ink-soft">
-              Avg P/L {formatINR(data.financialYear.totals.averageMonthlyProfit)} / month
+              Avg P/L <span className="whitespace-nowrap">{formatINR(data.financialYear.totals.averageMonthlyProfit)}</span> / month
             </p>
             <p className="mt-2 text-sm text-mint">
-              Best {data.financialYear.bestMonth.shortLabel}: {formatINR(data.financialYear.bestMonth.profit)}
+              Best {data.financialYear.bestMonth.shortLabel}:{" "}
+              <span className="whitespace-nowrap">{formatINR(data.financialYear.bestMonth.profit)}</span>
             </p>
             <p className="mt-1 text-sm text-coral">
-              Worst {data.financialYear.worstMonth.shortLabel}: {formatINR(data.financialYear.worstMonth.profit)}
+              Worst {data.financialYear.worstMonth.shortLabel}:{" "}
+              <span className="whitespace-nowrap">{formatINR(data.financialYear.worstMonth.profit)}</span>
             </p>
           </div>
         </div>
@@ -555,7 +559,7 @@ function MonthPnLGraph({
   const maxFlow = Math.max(...months.map((month) => Math.max(month.income, month.expense)), 1);
 
   return (
-    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
       {months.map((month, index) => {
         const prev = index > 0 ? months[index - 1] : null;
         const delta = prev ? month.profit - prev.profit : null;
@@ -566,10 +570,10 @@ function MonthPnLGraph({
         const incomeBar = Math.max(8, Math.round((month.income / maxFlow) * 100));
         const expenseBar = Math.max(8, Math.round((month.expense / maxFlow) * 100));
         return (
-          <div key={month.key} className="border border-line bg-white/80 p-4 shadow-[0_10px_24px_rgba(20,36,30,0.08)]">
+          <div key={month.key} className="min-w-0 border border-line bg-white/80 p-4 shadow-[0_10px_24px_rgba(20,36,30,0.08)]">
             <div className="flex items-start justify-between gap-2">
               <p className="font-semibold text-ink">{month.shortLabel}</p>
-              <div className="text-right">
+              <div className="min-w-0 text-right">
                 <span
                   className={`block font-mono text-[10px] uppercase tracking-wide ${
                     month.status === "profit"
@@ -581,7 +585,7 @@ function MonthPnLGraph({
                 >
                   {month.status}
                 </span>
-                <span className={`mt-1 inline-block rounded-full border border-line/80 px-2 py-0.5 font-mono text-[10px] ${deltaTone}`}>
+                <span className={`mt-1 inline-block max-w-full whitespace-nowrap rounded-full border border-line/80 px-2 py-0.5 font-mono text-[10px] ${deltaTone}`}>
                   {deltaLabel}
                 </span>
               </div>
@@ -594,7 +598,7 @@ function MonthPnLGraph({
               />
             </div>
             <p
-              className={`mt-2 font-mono text-sm ${
+              className={`mt-2 whitespace-nowrap font-mono text-sm ${
                 month.profit >= 0 ? "text-mint" : "text-coral"
               }`}
             >
@@ -614,10 +618,10 @@ function MonthPnLGraph({
                 </div>
               </div>
             </div>
-            <div className="mt-2 flex items-center gap-3 font-mono text-[11px]">
-              <span className="text-mint">In {formatINR(month.income)}</span>
+            <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 font-mono text-[11px]">
+              <span className="whitespace-nowrap text-mint">In {formatINR(month.income)}</span>
               <span className="text-ink-soft">·</span>
-              <span className="text-coral">Out {formatINR(month.expense)}</span>
+              <span className="whitespace-nowrap text-coral">Out {formatINR(month.expense)}</span>
             </div>
           </div>
         );
@@ -678,9 +682,9 @@ function Stat({
   const valueTone = accent ? (value < 0 ? "text-coral" : "text-mint") : "text-ink";
 
   return (
-    <div className="border border-line bg-white/50 p-5">
+    <div className="summary-tile border border-line bg-white/50 p-5">
       <p className="font-mono text-[11px] uppercase tracking-wider text-ink-soft">{label}</p>
-      <p className={`mt-3 text-3xl font-bold number-tick ${valueTone}`}>
+      <p className={`summary-value number-tick mt-3 font-bold ${valueTone}`}>
         <AnimatedNumber value={value} format={(n) => formatINR(n)} />
       </p>
       <p className="mt-2 font-mono text-xs text-ink-soft">{note}</p>
