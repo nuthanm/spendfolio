@@ -6,6 +6,7 @@ import { AppShell } from "@/components/AppShell";
 import { AnimatedNumber } from "@/components/AnimatedNumber";
 import { getDashboardData } from "@/lib/actions/dashboard";
 import { recordRecurringDebit } from "@/lib/actions/expenses";
+import { OutflowChart } from "@/components/OutflowChart";
 import { formatINR } from "@/lib/finance";
 
 type Dash = Awaited<ReturnType<typeof getDashboardData>>;
@@ -257,6 +258,8 @@ export default function DashboardClient() {
           </div>
         </div>
       </section>
+
+      <OutflowChart analysis={data.outflow} periodLabel={data.financialYear.selectedLabel} />
 
       <section className="mt-10 anim-rise-delay-2">
         <div className="mb-4 flex flex-wrap items-end justify-between gap-2">

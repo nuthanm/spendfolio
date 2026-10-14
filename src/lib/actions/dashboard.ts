@@ -12,6 +12,7 @@ import {
 } from "@/lib/dates";
 import { computeHealth, daysUntil } from "@/lib/finance";
 import { parseHouseDetails } from "@/lib/house";
+import { buildOutflow } from "@/lib/outflow";
 
 const OVERRIDE_PREFIX = "__override__:";
 
@@ -89,7 +90,7 @@ export async function getDashboardData(monthKey?: string, fyStartYear?: string) 
     }),
     prisma.expense.findMany({
       where: { userId: user.id },
-      select: { monthKey: true, amount: true },
+      select: { monthKey: true, amount: true, label: true },
     }),
     prisma.expense.findMany({
       where: {
@@ -285,6 +286,10 @@ export async function getDashboardData(monthKey?: string, fyStartYear?: string) 
   const fyAverageMonthlyProfit = fyProfitTotal / monthCount;
   const fyBestMonth = [...fyMonths].sort((a, b) => b.profit - a.profit)[0];
   const fyWorstMonth = [...fyMonths].sort((a, b) => a.profit - b.profit)[0];
+  const outflow = buildOutflow(
+    expenseMonthRows.filter((row) => visibleFyMonthKeys.includes(row.monthKey)),
+    visibleFyMonthKeys,
+  );
 
   const months = [...monthKeys].sort().reverse().map((k) => ({
     key: k,
@@ -351,6 +356,7 @@ export async function getDashboardData(monthKey?: string, fyStartYear?: string) 
       worstMonth: fyWorstMonth,
       months: fyMonths,
     },
+    outflow,
   };
 }
 
