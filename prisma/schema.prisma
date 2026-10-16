@@ -24,6 +24,7 @@ model User {
   metalTx         MetalTransaction[]
   houseProfiles   HouseProfile[]
   houseExpenses   HouseExpense[]
+  viewLinks       SpendViewLink[]
 }
 
 model Session {
@@ -180,4 +181,32 @@ model HouseExpense {
   @@index([userId, houseId])
   @@index([userId, date])
   @@index([userId, houseId, kind, monthKey])
+}
+
+model SpendViewLink {
+  id             String             @id @default(cuid())
+  userId         String
+  user           User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash      String             @unique
+  passwordHash   String
+  failedAttempts Int                @default(0)
+  lockedUntil    DateTime?
+  revokedAt      DateTime?
+  lastViewedAt   DateTime?
+  createdAt      DateTime           @default(now())
+  sessions       SpendViewSession[]
+
+  @@index([userId])
+  @@map("spend_view_links")
+}
+
+model SpendViewSession {
+  tokenHash String        @id
+  linkId    String
+  link      SpendViewLink @relation(fields: [linkId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  createdAt DateTime      @default(now())
+
+  @@index([linkId])
+  @@map("spend_view_sessions")
 }

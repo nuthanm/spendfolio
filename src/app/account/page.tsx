@@ -12,6 +12,7 @@ import { getSessionUser } from "@/lib/actions/session";
 import { getEnabledModules, setModuleEnabled } from "@/lib/actions/modules";
 import type { WealthModule } from "@/lib/modules";
 import { WEALTH_MODULES, MODULE_ROUTES } from "@/lib/modules";
+import { ViewLinkSection } from "@/app/account/ViewLinkSection";
 
 export default function AccountPage() {
   const [twoFA, setTwoFA] = useState(true);
@@ -143,6 +144,7 @@ export default function AccountPage() {
       </p>
 
       <div className="grid gap-6 lg:grid-cols-2">
+        <ViewLinkSection />
         <section className="border border-line bg-white/50 p-5 anim-rise">
           <h2 className="text-lg font-bold text-ink">Wealth modules</h2>
           <p className="mt-2 text-sm text-ink-soft">

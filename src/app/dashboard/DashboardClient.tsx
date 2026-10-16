@@ -23,12 +23,20 @@ type RecurringEditState = {
   customFields: string;
 };
 
-export default function DashboardClient() {
+export default function DashboardClient({
+  readOnly = false,
+  initialData = null,
+  viewBasePath,
+}: {
+  readOnly?: boolean;
+  initialData?: Dash | null;
+  viewBasePath?: string;
+} = {}) {
   const search = useSearchParams();
   const router = useRouter();
   const initialMonth = search.get("month") || undefined;
   const initialFy = search.get("fy") || undefined;
-  const [data, setData] = useState<Dash | null>(null);
+  const [data, setData] = useState<Dash | null>(readOnly ? initialData : null);
   const [pending, startTransition] = useTransition();
   const [hoveredLabel, setHoveredLabel] = useState<string | null>(null);
   const [selectedLabel, setSelectedLabel] = useState<string | null>(null);
@@ -38,8 +46,17 @@ export default function DashboardClient() {
   const [recurringSavedFlash, setRecurringSavedFlash] = useState(false);
 
   useEffect(() => {
+    if (readOnly) {
+      if (!initialData && process.env.NODE_ENV === "development") {
+        console.warn("DashboardClient: readOnly is set without initial summary data.");
+      }
+      setData(initialData);
+      return undefined;
+    }
+    let active = true;
     startTransition(async () => {
       const d = await getDashboardData(initialMonth, initialFy);
+      if (!active) return;
       setData(d);
       setHoveredLabel(null);
       setSelectedLabel(null);
@@ -47,9 +64,13 @@ export default function DashboardClient() {
       setRecurringError(null);
       setRecurringSavedFlash(false);
     });
-  }, [initialMonth, initialFy]);
+    return () => {
+      active = false;
+    };
+  }, [readOnly, initialData, initialMonth, initialFy]);
 
   function startRecurringEdit(tile: RecurringTile) {
+    if (readOnly) return;
     setRecurringEdit({
       id: tile.id,
       title: tile.title,
@@ -64,7 +85,7 @@ export default function DashboardClient() {
 
   async function saveRecurringEdit(e: React.FormEvent) {
     e.preventDefault();
-    if (!recurringEdit) return;
+    if (readOnly || !recurringEdit) return;
 
     const fd = new FormData();
     fd.set("date", recurringEdit.date);
@@ -98,10 +119,14 @@ export default function DashboardClient() {
     else params.delete("month");
     if (next.fy) params.set("fy", next.fy);
     else params.delete("fy");
-    router.push(`/dashboard?${params.toString()}`);
+    const base = viewBasePath || "/dashboard";
+    router.push(`${base}?${params.toString()}`);
   }
 
   if (!data) {
+    if (readOnly) {
+      return <p className="font-mono text-sm text-ink-soft">No summary for this view.</p>;
+    }
     return (
       <AppShell title="Dashboard" subtitle="Loading your monthly math…">
         <p className="font-mono text-sm text-ink-soft">Calculating…</p>
@@ -109,11 +134,9 @@ export default function DashboardClient() {
     );
   }
 
-  return (
-    <AppShell
-      title="Dashboard"
-      subtitle="Live monthly math — income, spend, buffer, and renewals that need attention."
-    >
+  const dashboard = (
+    <>
+      {readOnly ? <h2 className="mb-4 text-xl font-bold text-ink">Summaries</h2> : null}
       <div className="mb-6 flex flex-col gap-3 anim-rise sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
         <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
           <label className="flex min-w-0 items-center gap-3">
@@ -273,16 +296,14 @@ export default function DashboardClient() {
         <section className="mt-10 anim-rise-delay-2">
           <div className="mb-4 flex flex-wrap items-end justify-between gap-2">
             <h2 className="text-xl font-bold text-ink">Upcoming recurring</h2>
-            <p className="font-mono text-xs text-[#c45f12]">orange · click card to edit</p>
+            <p className="font-mono text-xs text-[#c45f12]">
+              {readOnly ? "orange · upcoming" : "orange · click card to edit"}
+            </p>
           </div>
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            {data.recurringTiles.map((tile) => (
-              <button
-                key={tile.id}
-                type="button"
-                onClick={() => startRecurringEdit(tile)}
-                className="border border-[#e67e22]/40 bg-[rgba(230,126,34,0.08)] p-3"
-              >
+            {data.recurringTiles.map((tile) => {
+              const card = (
+              <>
                 <p className="text-sm font-semibold text-ink">{tile.title}</p>
                 <p className="mt-1 font-mono text-lg font-bold text-ink">
                   {formatINR(tile.amount)}
@@ -294,11 +315,31 @@ export default function DashboardClient() {
                 {tile.remarks ? (
                   <p className="mt-1 line-clamp-2 text-xs text-ink-soft">{tile.remarks}</p>
                 ) : null}
+                {readOnly ? null : (
                 <p className="mt-2 font-mono text-[10px] uppercase tracking-wide text-[#c45f12]">
                   edit and save
                 </p>
+                )}
+              </>
+              );
+              if (readOnly) {
+                return (
+                  <div key={tile.id} className="border border-[#e67e22]/40 bg-[rgba(230,126,34,0.08)] p-3">
+                    {card}
+                  </div>
+                );
+              }
+              return (
+              <button
+                key={tile.id}
+                type="button"
+                onClick={() => startRecurringEdit(tile)}
+                className="border border-[#e67e22]/40 bg-[rgba(230,126,34,0.08)] p-3"
+              >
+                {card}
               </button>
-            ))}
+              );
+            })}
           </div>
 
           {recurringSavedFlash ? (
@@ -307,7 +348,7 @@ export default function DashboardClient() {
             </p>
           ) : null}
 
-          {recurringEdit ? (
+          {!readOnly && recurringEdit ? (
             <form
               className="mt-4 border border-[#e67e22]/40 bg-[rgba(230,126,34,0.08)] p-4"
               onSubmit={saveRecurringEdit}
@@ -513,7 +554,9 @@ export default function DashboardClient() {
         <div>
           <h2 className="mb-4 text-xl font-bold text-ink">Recent with remarks</h2>
           {data.recent.length === 0 ? (
-            <p className="text-sm text-ink-soft">No expenses yet — add one from Expenses.</p>
+            <p className="text-sm text-ink-soft">
+              {readOnly ? "No expenses yet." : "No expenses yet — add one from Expenses."}
+            </p>
           ) : (
             <ul className="space-y-2">
               {data.recent.map((e) => (
@@ -549,6 +592,16 @@ export default function DashboardClient() {
           )}
         </div>
       </section>
+    </>
+  );
+
+  if (readOnly) return dashboard;
+  return (
+    <AppShell
+      title="Dashboard"
+      subtitle="Live monthly math — income, spend, buffer, and renewals that need attention."
+    >
+      {dashboard}
     </AppShell>
   );
 }
