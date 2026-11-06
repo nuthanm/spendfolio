@@ -27,7 +27,7 @@ export function PropertySwitcher({
     <section className="border border-line bg-white/50 p-4">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <label className="min-w-56 flex-1">
-          <span className="mb-1 block text-xs text-ink-soft">Property</span>
+          <span className="mb-1 block text-xs text-ink-soft">House</span>
           <select
             className="field"
             value={selectedId}

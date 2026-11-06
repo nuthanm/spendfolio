@@ -21,7 +21,7 @@ export default async function HousePage({
   return (
     <AppShellWithModules
       title="House Tracking"
-      subtitle="Track every property, builder payment, post-handover living cost, and house contact in one place."
+      subtitle="Pick a house, then see purchase costs, maintenance, taxes, bills, food, and transport in one dashboard."
       enabledModules={enabled}
     >
       <Suspense fallback={<p className="font-mono text-sm text-ink-soft">Loading house tracker…</p>}>

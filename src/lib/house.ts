@@ -34,6 +34,8 @@ export const PURCHASE_COST_HEADS = [
   "Corpus",
   "TDS",
   "Registration",
+  "Construction",
+  "Pre-occupancy",
   "Stamp duty",
   "Raised request",
   "Modification",
@@ -58,7 +60,16 @@ export const LIVING_CATEGORIES = [
 ] as const;
 export type LivingCategory = (typeof LIVING_CATEGORIES)[number];
 
-export const HOUSE_EXPENSE_KINDS = ["purchase", "living", "maintenance"] as const;
+export const HOUSE_EXPENSE_KINDS = [
+  "purchase",
+  "living",
+  "maintenance",
+  "yearly",
+  "utility",
+  "food",
+  "kitchen",
+  "transport",
+] as const;
 export type HouseExpenseKind = (typeof HOUSE_EXPENSE_KINDS)[number];
 
 /** @deprecated Use PURCHASE_COST_HEADS / LIVING_CATEGORIES */
@@ -123,6 +134,8 @@ export type HouseDetailsPayload = {
   maintenanceRates: HouseMaintenanceRate[];
   contacts: HouseContact[];
   legacyPaid: HouseLegacyPaidSnapshot;
+  waterTaxApplicable: boolean;
+  dishTvApplicable: boolean;
 };
 
 export type HouseAreas = {
@@ -245,6 +258,8 @@ export function defaultHouseDetails(): HouseDetailsPayload {
     benefits: [],
     maintenanceRates: [],
     contacts: [],
+    waterTaxApplicable: false,
+    dishTvApplicable: false,
     legacyPaid: {
       downPaymentPaid: null,
       raisedRequestPayments: null,
@@ -276,6 +291,8 @@ export function parseHouseDetails(raw: string | null | undefined): HouseDetailsP
       benefits: parseBenefits(parsed.benefits),
       maintenanceRates: parseMaintenanceRates(parsed.maintenanceRates),
       contacts: parseContacts(parsed.contacts),
+      waterTaxApplicable: parsed.waterTaxApplicable === true,
+      dishTvApplicable: parsed.dishTvApplicable === true,
       legacyPaid: {
         downPaymentPaid: toNullableNumber(legacyRaw?.downPaymentPaid ?? parsed.downPaymentPaid),
         raisedRequestPayments: toNullableNumber(
@@ -399,6 +416,8 @@ export function buildCostHeadProgress(
     { category: "Corpus", target: details.corpusTarget },
     { category: "TDS", target: details.tdsTarget },
     { category: "Registration", target: details.registrationTarget },
+    { category: "Construction", target: null },
+    { category: "Pre-occupancy", target: null },
     { category: "Stamp duty", target: details.stampDutyTarget },
     { category: "Raised request", target: null },
     { category: "Modification", target: null },
@@ -449,4 +468,276 @@ export function shiftMonthKey(monthKey: string, delta: number): string {
   const [yearRaw, monthRaw] = monthKey.split("-").map(Number);
   const date = new Date(yearRaw, monthRaw - 1 + delta, 1);
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+}
+
+export const HOUSE_SECTION_IDS = [
+  "onetime",
+  "maintenance",
+  "yearly",
+  "utility",
+  "food",
+  "kitchen",
+  "transport",
+] as const;
+export type HouseSectionId = (typeof HOUSE_SECTION_IDS)[number];
+
+export const MODIFICATION_OPTIONS = [
+  "Flooring",
+  "Kitchen",
+  "Wardrobes / carpentry",
+  "Electrical",
+  "Plumbing",
+  "Paint",
+  "False ceiling",
+  "Bathroom",
+  "Civil work",
+  "Other",
+] as const;
+
+export const QUANTITY_UNITS = [
+  { id: "g", label: "Grams" },
+  { id: "kg", label: "Kilos" },
+  { id: "L", label: "Liters" },
+  { id: "text", label: "Describe quantity" },
+] as const;
+export type QuantityUnitId = (typeof QUANTITY_UNITS)[number]["id"];
+
+export type HouseCategoryDef = {
+  category: string;
+  label: string;
+  quantity?: boolean;
+};
+
+export type KitchenGroup = {
+  category: string;
+  label: string;
+  items: string[];
+};
+
+export const KITCHEN_GROUPS: KitchenGroup[] = [
+  {
+    category: "Daal",
+    label: "Daal",
+    items: ["Toor dal", "Moong dal", "Urad dal", "Chana dal", "Masoor dal", "Rajma", "Kabuli chana", "Other dal"],
+  },
+  {
+    category: "Roti",
+    label: "Roti",
+    items: ["Wheat atta", "Maida", "Rava / sooji", "Other roti item"],
+  },
+  {
+    category: "Dosa",
+    label: "Dosa",
+    items: ["Dosa batter", "Dosa rice", "Urad for dosa", "Other dosa item"],
+  },
+  {
+    category: "Idly",
+    label: "Idly",
+    items: ["Idly batter", "Idly rice", "Urad for idly", "Other idly item"],
+  },
+  {
+    category: "Tiffins",
+    label: "Tiffins",
+    items: ["Poha", "Upma rava", "Bread", "Vermicelli", "Semiya", "Other tiffin"],
+  },
+  {
+    category: "Rice and dinner",
+    label: "Rice and dinner",
+    items: ["Rice", "Sambar items", "Rasam items", "Cooking oil", "Spices", "Other dinner item"],
+  },
+];
+
+export type HouseSectionDef = {
+  id: HouseSectionId;
+  label: string;
+  shortLabel: string;
+  description: string;
+  cadence: "once" | "month" | "year";
+  kind: HouseExpenseKind;
+  categories: HouseCategoryDef[];
+};
+
+const ONETIME_PRIMARY = ["TDS", "Corpus", "Registration", "Construction", "Modification", "Pre-occupancy"] as const;
+
+export const HOUSE_SECTIONS: HouseSectionDef[] = [
+  {
+    id: "onetime",
+    label: "One-time purchase",
+    shortLabel: "One-time",
+    description: "Purchase costs, construction, modifications, and pre-occupancy inspection.",
+    cadence: "once",
+    kind: "purchase",
+    categories: [
+      { category: "TDS", label: "TDS" },
+      { category: "Corpus", label: "Corpus" },
+      { category: "Registration", label: "Registration cost" },
+      { category: "Construction", label: "Construction cost" },
+      { category: "Modification", label: "Modification" },
+      { category: "Pre-occupancy", label: "House inspection / pre-occupancy" },
+      { category: "Down payment", label: "Down payment" },
+      { category: "Stamp duty", label: "Stamp duty" },
+      { category: "Raised request", label: "Raised request" },
+      { category: "Interior", label: "Interior" },
+      { category: "Loan EMI", label: "Loan EMI" },
+      { category: "Other", label: "Other purchase cost" },
+    ],
+  },
+  {
+    id: "maintenance",
+    label: "Monthly maintenance",
+    shortLabel: "Maintenance",
+    description: "Society or building maintenance, tracked on its own.",
+    cadence: "month",
+    kind: "maintenance",
+    categories: [{ category: "Maintenance", label: "Maintenance" }],
+  },
+  {
+    id: "yearly",
+    label: "Yearly taxes",
+    shortLabel: "Yearly",
+    description: "Property tax, and water tax when this house pays it.",
+    cadence: "year",
+    kind: "yearly",
+    categories: [
+      { category: "Property tax", label: "Property tax" },
+      { category: "Water tax", label: "Water tax" },
+    ],
+  },
+  {
+    id: "utility",
+    label: "Other monthly bills",
+    shortLabel: "Bills",
+    description: "Electricity, internet, maid, gas, and Dish TV when you have it.",
+    cadence: "month",
+    kind: "utility",
+    categories: [
+      { category: "EB bill", label: "EB bill" },
+      { category: "Internet", label: "Internet bill" },
+      { category: "Maid", label: "Maid" },
+      { category: "Gas / piped gas", label: "Gas or piped gas" },
+      { category: "Dish TV", label: "Dish TV" },
+    ],
+  },
+  {
+    id: "food",
+    label: "Regular food",
+    shortLabel: "Food",
+    description: "Milk, curd, vegetables, fruits, and nuts.",
+    cadence: "month",
+    kind: "food",
+    categories: [
+      { category: "Milk", label: "Milk" },
+      { category: "Curd", label: "Curd" },
+      { category: "Vegetables", label: "Vegetables" },
+      { category: "Fruits", label: "Fruits" },
+      { category: "Nuts", label: "Nuts" },
+    ],
+  },
+  {
+    id: "kitchen",
+    label: "Kitchen staples",
+    shortLabel: "Kitchen",
+    description: "Daal, roti, dosa, idly, tiffins, and rice or dinner items, with quantity and price.",
+    cadence: "month",
+    kind: "kitchen",
+    categories: KITCHEN_GROUPS.map((group) => ({ category: group.category, label: group.label, quantity: true })),
+  },
+  {
+    id: "transport",
+    label: "Transport",
+    shortLabel: "Transport",
+    description: "Fuel, service, and regular upkeep for the car or bike, plus public transport.",
+    cadence: "month",
+    kind: "transport",
+    categories: [
+      { category: "Petrol — car", label: "Petrol for car", quantity: true },
+      { category: "Petrol — bike", label: "Petrol for bike", quantity: true },
+      { category: "Bike service", label: "Bike service" },
+      { category: "Car service", label: "Car service" },
+      { category: "Car maintenance", label: "Car maintenance" },
+      { category: "Bike maintenance", label: "Bike maintenance" },
+      { category: "Public transport", label: "Public transport" },
+    ],
+  },
+];
+
+const LEGACY_FOOD = new Set(["Milk", "Fruits", "Vegetables"]);
+const LEGACY_KITCHEN = new Set(["Rice", "Groceries"]);
+const LEGACY_UTILITY = new Set(["Maid", "Internet", "Gas / piped gas", "Household items"]);
+
+export function houseSection(id: HouseSectionId): HouseSectionDef {
+  const section = HOUSE_SECTIONS.find((item) => item.id === id);
+  if (!section) throw new Error(`Unknown house section: ${id}`);
+  return section;
+}
+
+export function sectionForExpense(row: { kind: string; category: string }): HouseSectionId {
+  if (row.kind === "yearly" || row.category === "Property tax" || row.category === "Water tax") return "yearly";
+  if (row.kind === "utility") return "utility";
+  if (row.kind === "food") return "food";
+  if (row.kind === "kitchen") return "kitchen";
+  if (row.kind === "transport") return "transport";
+  if (row.kind === "maintenance" || row.category === "Maintenance") return "maintenance";
+  if (row.kind === "purchase") return "onetime";
+  if (LEGACY_FOOD.has(row.category)) return "food";
+  if (LEGACY_KITCHEN.has(row.category)) return "kitchen";
+  if (LEGACY_UTILITY.has(row.category)) return "utility";
+  if (row.kind === "living") return "utility";
+  return "onetime";
+}
+
+export function categoryLabel(sectionId: HouseSectionId, category: string): string {
+  const match = houseSection(sectionId).categories.find((item) => item.category === category);
+  if (match) return match.label;
+  if (category === "Registration") return "Registration cost";
+  if (category === "Pre-occupancy") return "House inspection / pre-occupancy";
+  if (category === "Construction") return "Construction cost";
+  return category;
+}
+
+export function isPrimaryOnetimeCategory(category: string): boolean {
+  return (ONETIME_PRIMARY as readonly string[]).includes(category);
+}
+
+export function allowsCategory(sectionId: HouseSectionId, category: string): boolean {
+  if (houseSection(sectionId).categories.some((item) => item.category === category)) return true;
+  if (sectionId === "onetime" && isPurchaseCostHead(category)) return true;
+  if (sectionId === "food" && LEGACY_FOOD.has(category)) return true;
+  if (sectionId === "kitchen" && (LEGACY_KITCHEN.has(category) || category === "Other")) return true;
+  if (sectionId === "utility" && (LEGACY_UTILITY.has(category) || category === "Other" || category === "Household items")) {
+    return true;
+  }
+  return false;
+}
+
+export function purchasedArea(areas: HouseAreas): { sqft: number | null; basis: string } {
+  if (areas.superBuiltupArea && areas.superBuiltupArea > 0) {
+    return { sqft: areas.superBuiltupArea, basis: "Super built-up" };
+  }
+  if (areas.builtupArea && areas.builtupArea > 0) {
+    return { sqft: areas.builtupArea, basis: "Built-up" };
+  }
+  if (areas.carpetArea && areas.carpetArea > 0) {
+    return { sqft: areas.carpetArea, basis: "Carpet" };
+  }
+  return { sqft: null, basis: "Sqft purchased" };
+}
+
+export function formatQuantity(row: {
+  quantity: number | null;
+  unit: string;
+  quantityText: string;
+}): string {
+  const text = row.quantityText.trim();
+  if (text) return text;
+  if (row.quantity === null || !Number.isFinite(row.quantity)) return "";
+  const qty = Number.isInteger(row.quantity)
+    ? String(row.quantity)
+    : row.quantity.toLocaleString("en-IN", { maximumFractionDigits: 3 });
+  if (row.unit === "g" || row.unit === "kg" || row.unit === "L") return `${qty} ${row.unit}`;
+  return row.unit ? `${qty} ${row.unit}` : qty;
+}
+
+export function isQuantityUnit(value: string): value is Exclude<QuantityUnitId, "text"> {
+  return value === "g" || value === "kg" || value === "L";
 }

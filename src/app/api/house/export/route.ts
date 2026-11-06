@@ -82,6 +82,9 @@ export async function GET() {
             Category: row.category,
             CustomLabel: row.customLabel,
             Amount: row.amount,
+            Quantity: row.quantity ?? "",
+            Unit: row.unit,
+            QuantityText: row.quantityText,
             Recurring: row.recurring ? "Yes" : "No",
             Note: row.note,
           }))

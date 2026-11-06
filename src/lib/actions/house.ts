@@ -9,18 +9,21 @@ import {
   buildCostHeadProgress,
   computeUdsSqft,
   defaultHouseDetails,
-  isPurchaseCostHead,
+  allowsCategory,
   isPropertyType,
+  isQuantityUnit,
   legacySnapshotGaps,
   livingKindForCategory,
   loanPercentOfPrice,
   parseHouseDetails,
+  sectionForExpense,
   serializeHouseDetails,
   type HouseBenefit,
   type HouseContact,
   type HouseDetailsPayload,
   type HouseExpenseKind,
   type HouseMaintenanceRate,
+  type HouseSectionId,
 } from "@/lib/house";
 
 type HouseActionResult =
@@ -42,6 +45,9 @@ export type HouseTrackerExpense = {
   customLabel: string;
   amount: number;
   note: string;
+  quantity: number | null;
+  unit: string;
+  quantityText: string;
   recurring: boolean;
   createdAt: string;
 };
@@ -99,8 +105,37 @@ function parseNullableInt(input: FormDataEntryValue | null): number | null {
 }
 
 function asKind(value: string): HouseExpenseKind {
-  if (value === "living" || value === "maintenance" || value === "purchase") return value;
+  if (
+    value === "living" ||
+    value === "maintenance" ||
+    value === "purchase" ||
+    value === "yearly" ||
+    value === "utility" ||
+    value === "food" ||
+    value === "kitchen" ||
+    value === "transport"
+  ) {
+    return value;
+  }
   return "purchase";
+}
+
+function readQuantity(formData: FormData): { quantity: number | null; unit: string; quantityText: string; error?: string } {
+  const unitRaw = String(formData.get("unit") || "").trim();
+  const quantityText = String(formData.get("quantityText") || "").trim();
+  const quantity = parseNullableNumber(formData.get("quantity"));
+
+  if (unitRaw === "text") {
+    return { quantity: null, unit: "", quantityText };
+  }
+  if (unitRaw && !isQuantityUnit(unitRaw)) {
+    return { quantity: null, unit: "", quantityText: "", error: "Pick grams, kilos, liters, or describe the quantity." };
+  }
+  if (quantity !== null && quantity < 0) {
+    return { quantity: null, unit: "", quantityText: "", error: "Quantity cannot be negative." };
+  }
+  if (quantity === null) return { quantity: null, unit: "", quantityText: "" };
+  return { quantity, unit: unitRaw, quantityText: "" };
 }
 
 function mapExpense(expense: {
@@ -112,6 +147,9 @@ function mapExpense(expense: {
   customLabel: string;
   amount: number;
   note: string;
+  quantity: number | null;
+  unit: string;
+  quantityText: string;
   recurring: boolean;
   createdAt: Date;
 }): HouseTrackerExpense {
@@ -124,6 +162,9 @@ function mapExpense(expense: {
     customLabel: expense.customLabel,
     amount: expense.amount,
     note: expense.note,
+    quantity: expense.quantity,
+    unit: expense.unit,
+    quantityText: expense.quantityText,
     recurring: expense.recurring,
     createdAt: expense.createdAt.toISOString(),
   };
@@ -412,6 +453,30 @@ export async function updateHouseProfile(formData: FormData): Promise<HouseActio
   return { ok: true };
 }
 
+export async function updateHouseFlags(formData: FormData): Promise<HouseActionResult> {
+  const user = await requireUser();
+  const houseId = requireHouseId(formData);
+  const profile = await requireOwnedProfile(user.id, houseId);
+  if (!profile) return { error: "Property not found." };
+
+  const parsed = parseHouseDetails(profile.loanDetails);
+  const next = { ...parsed };
+  if (formData.has("waterTaxApplicable")) {
+    next.waterTaxApplicable = String(formData.get("waterTaxApplicable")) === "true";
+  }
+  if (formData.has("dishTvApplicable")) {
+    next.dishTvApplicable = String(formData.get("dishTvApplicable")) === "true";
+  }
+
+  await prisma.houseProfile.update({
+    where: { id: profile.id },
+    data: { loanDetails: serializeHouseDetails(next) },
+  });
+
+  revalidateHouse();
+  return { ok: true };
+}
+
 export async function updateHouseBudget(formData: FormData): Promise<HouseActionResult> {
   const user = await requireUser();
   const houseId = requireHouseId(formData);
@@ -427,41 +492,72 @@ export async function updateHouseBudget(formData: FormData): Promise<HouseAction
   return { ok: true };
 }
 
+function parseExpenseForm(formData: FormData):
+  | {
+      date: string;
+      monthKey: string;
+      kind: HouseExpenseKind;
+      category: string;
+      customLabel: string;
+      amount: number;
+      note: string;
+      quantity: number | null;
+      unit: string;
+      quantityText: string;
+      recurring: boolean;
+    }
+  | { error: string } {
+  const date = String(formData.get("date") || "").trim();
+  const category = String(formData.get("category") || "").trim();
+  const customLabel = String(formData.get("customLabel") || "").trim();
+  const amount = Number(formData.get("amount") || 0);
+  const note = String(formData.get("note") || "").trim();
+  const kind = asKind(String(formData.get("kind") || "purchase").trim());
+  const section = sectionForExpense({ kind, category }) as HouseSectionId;
+
+  if (!date) return { error: "Date is required." };
+  if (!category) return { error: "Choose what this expense is for." };
+  if (!Number.isFinite(amount) || amount < 0) return { error: "Amount must be zero or more." };
+  if (amount <= 0) return { error: "Enter how much you spent." };
+  if (!allowsCategory(section, category)) return { error: "Pick a valid expense type." };
+  if (kind === "kitchen" && !customLabel) return { error: "Enter the item name." };
+  if (category === "Modification" && !customLabel) return { error: "Choose the modification." };
+  if (category === "Other" && kind !== "kitchen" && !customLabel && !note) {
+    return { error: "Name this other expense." };
+  }
+
+  const quantity = readQuantity(formData);
+  if (quantity.error) return { error: quantity.error };
+
+  return {
+    date,
+    monthKey: monthKeyFromDate(date),
+    kind,
+    category,
+    customLabel,
+    amount,
+    note,
+    quantity: quantity.quantity,
+    unit: quantity.unit,
+    quantityText: quantity.quantityText,
+    recurring: kind !== "purchase",
+  };
+}
+
 export async function addHouseExpense(formData: FormData): Promise<HouseActionResult> {
   const user = await requireUser();
   const houseId = requireHouseId(formData);
   const profile = await requireOwnedProfile(user.id, houseId);
   if (!profile) return { error: "Property not found." };
 
-  const date = String(formData.get("date") || "").trim();
-  const category = String(formData.get("category") || "").trim();
-  const customLabel = String(formData.get("customLabel") || "").trim();
-  const amount = Number(formData.get("amount") || 0);
-  const note = String(formData.get("note") || "").trim();
-  const kindRaw = String(formData.get("kind") || "purchase").trim();
-  const kind = asKind(kindRaw);
-
-  if (!date) return { error: "Date is required." };
-  if (!category) return { error: "Category is required." };
-  if (!Number.isFinite(amount) || amount < 0) {
-    return { error: "Amount must be zero or more." };
-  }
-  if (kind === "purchase" && !isPurchaseCostHead(category) && category !== "Other") {
-    return { error: "Pick a valid payment head." };
-  }
+  const parsedEntry = parseExpenseForm(formData);
+  if ("error" in parsedEntry) return parsedEntry;
 
   await prisma.houseExpense.create({
     data: {
       userId: user.id,
       houseId: profile.id,
-      date,
-      monthKey: monthKeyFromDate(date),
-      kind,
-      category,
-      customLabel,
-      amount,
-      note,
-      recurring: false,
+      ...parsedEntry,
     },
   });
 
@@ -472,30 +568,12 @@ export async function addHouseExpense(formData: FormData): Promise<HouseActionRe
 export async function updateHouseExpense(id: string, formData: FormData): Promise<HouseActionResult> {
   const user = await requireUser();
 
-  const date = String(formData.get("date") || "").trim();
-  const category = String(formData.get("category") || "").trim();
-  const customLabel = String(formData.get("customLabel") || "").trim();
-  const amount = Number(formData.get("amount") || 0);
-  const note = String(formData.get("note") || "").trim();
-  const kind = asKind(String(formData.get("kind") || "purchase").trim());
-
-  if (!date) return { error: "Date is required." };
-  if (!category) return { error: "Category is required." };
-  if (!Number.isFinite(amount) || amount < 0) {
-    return { error: "Amount must be zero or more." };
-  }
+  const parsedEntry = parseExpenseForm(formData);
+  if ("error" in parsedEntry) return parsedEntry;
 
   const result = await prisma.houseExpense.updateMany({
     where: { id, userId: user.id },
-    data: {
-      date,
-      monthKey: monthKeyFromDate(date),
-      kind,
-      category,
-      customLabel,
-      amount,
-      note,
-    },
+    data: parsedEntry,
   });
 
   if (!result.count) return { error: "Entry not found." };

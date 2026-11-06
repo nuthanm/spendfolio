@@ -1,0 +1,5 @@
+-- AlterTable
+ALTER TABLE "HouseExpense"
+ADD COLUMN "quantity" DOUBLE PRECISION,
+ADD COLUMN "unit" TEXT NOT NULL DEFAULT '',
+ADD COLUMN "quantityText" TEXT NOT NULL DEFAULT '';

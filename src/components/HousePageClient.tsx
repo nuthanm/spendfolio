@@ -10,31 +10,30 @@ import {
   deleteHouseExpense,
   deleteHouseProfile,
   getHouseTrackerData,
-  updateHouseBudget,
   updateHouseContact,
   updateHouseExpense,
+  updateHouseFlags,
   updateHouseProfile,
-  upsertLivingMonth,
   type HouseTrackerData,
 } from "@/lib/actions/house";
-import { formatINR } from "@/lib/finance";
 import { currentMonthKey } from "@/lib/dates";
+import { HOUSE_SECTIONS, type HouseSectionId } from "@/lib/house";
 import { PropertySwitcher } from "@/components/house/PropertySwitcher";
 import {
   PropertyDetailsForm,
   propertyFormFromProfile,
   type PropertyFormState,
 } from "@/components/house/PropertyDetailsForm";
-import { PurchasePaymentsTab } from "@/components/house/PurchasePaymentsTab";
-import { LivingExpensesTab } from "@/components/house/LivingExpensesTab";
 import { HouseContactsTab } from "@/components/house/HouseContactsTab";
+import { HouseDashboard } from "@/components/house/HouseDashboard";
+import { HouseSectionLedger } from "@/components/house/HouseSectionLedger";
 
-type HouseTab = "property" | "purchase" | "living" | "contacts";
+type HouseTab = "dashboard" | HouseSectionId | "property" | "contacts";
 
 const TABS: { id: HouseTab; label: string }[] = [
+  { id: "dashboard", label: "Dashboard" },
+  ...HOUSE_SECTIONS.map((section) => ({ id: section.id as HouseTab, label: section.shortLabel })),
   { id: "property", label: "Property" },
-  { id: "purchase", label: "Purchase & payments" },
-  { id: "living", label: "Living expenses" },
   { id: "contacts", label: "Contacts" },
 ];
 
@@ -43,7 +42,9 @@ export function HousePageClient({ initialData }: { initialData: HouseTrackerData
   const searchParams = useSearchParams();
   const [data, setData] = useState(initialData);
   const [form, setForm] = useState<PropertyFormState>(() => propertyFormFromProfile(initialData.profile));
-  const [activeTab, setActiveTab] = useState<HouseTab>("property");
+  const [activeTab, setActiveTab] = useState<HouseTab>("dashboard");
+  const [monthKey, setMonthKey] = useState(currentMonthKey);
+  const [entrySavedTick, setEntrySavedTick] = useState(0);
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
@@ -72,13 +73,19 @@ export function HousePageClient({ initialData }: { initialData: HouseTrackerData
     });
   }
 
-  function applyResult(result: { ok: true } | { error: string }, message: string, houseId?: string) {
+  function applyResult(
+    result: { ok: true } | { error: string },
+    message: string,
+    houseId?: string,
+    entry = false,
+  ) {
     if ("error" in result) {
       setError(result.error);
       return false;
     }
     setError(null);
     flashSuccess(message);
+    if (entry) setEntrySavedTick((tick) => tick + 1);
     refresh(houseId);
     return true;
   }
@@ -89,7 +96,6 @@ export function HousePageClient({ initialData }: { initialData: HouseTrackerData
       const next = await getHouseTrackerData(id);
       setData(next);
       setForm(propertyFormFromProfile(next.profile));
-      setActiveTab("property");
     });
   }
 
@@ -108,7 +114,7 @@ export function HousePageClient({ initialData }: { initialData: HouseTrackerData
         const next = await getHouseTrackerData(result.id);
         setData(next);
         setForm(propertyFormFromProfile(next.profile));
-        setActiveTab("property");
+        setActiveTab("dashboard");
         flashSuccess("Property added");
       }
     });
@@ -170,42 +176,17 @@ export function HousePageClient({ initialData }: { initialData: HouseTrackerData
     });
   }
 
-  const livingSpend = data.totals.livingThisMonth;
-  const livingBudget = data.profile.monthlyBudget || 0;
-  const livingOver = livingBudget > 0 && livingSpend > livingBudget;
+  const sectionTab = HOUSE_SECTIONS.find((section) => section.id === activeTab)?.id;
+
+  function saveEntry(formData: FormData, editingId: string | null) {
+    startTransition(async () => {
+      const result = editingId ? await updateHouseExpense(editingId, formData) : await addHouseExpense(formData);
+      applyResult(result, editingId ? "Entry updated" : "Entry added", undefined, true);
+    });
+  }
 
   return (
     <div className="space-y-8 anim-rise">
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <div className="border border-line bg-white/50 p-4">
-          <p className="font-mono text-[11px] uppercase tracking-wider text-ink-soft">Purchase paid</p>
-          <p className="mt-2 text-2xl font-bold text-ink">{formatINR(data.totals.purchasePaid)}</p>
-        </div>
-        <div className="border border-line bg-white/50 p-4">
-          <p className="font-mono text-[11px] uppercase tracking-wider text-ink-soft">Down payment</p>
-          <p className="mt-2 text-2xl font-bold text-ink">{data.totals.downPaymentProgressPct.toFixed(0)}%</p>
-          <p className="mt-1 text-xs text-ink-soft">Pending: {formatINR(data.totals.downPaymentPending)}</p>
-        </div>
-        <div className="border border-line bg-white/50 p-4">
-          <p className="font-mono text-[11px] uppercase tracking-wider text-ink-soft">Living this month</p>
-          <p className={`mt-2 text-2xl font-bold ${livingOver ? "text-coral" : "text-ink"}`}>
-            {formatINR(livingSpend)}
-          </p>
-          <p className="mt-1 text-xs text-ink-soft">
-            Budget {formatINR(livingBudget)} · {currentMonthKey()}
-          </p>
-        </div>
-        <div className="border border-line bg-white/50 p-4">
-          <p className="font-mono text-[11px] uppercase tracking-wider text-ink-soft">Loan</p>
-          <p className="mt-2 text-lg font-bold text-ink">
-            {formatINR(data.profile.details.loan.sanctionedAmount || 0)}
-          </p>
-          <p className="mt-1 text-xs text-ink-soft">
-            {data.totals.loanPercent === null ? "Set purchase price to see loan %" : `${data.totals.loanPercent.toFixed(1)}% of price`}
-          </p>
-        </div>
-      </div>
-
       {error ? <div className="border border-coral/50 bg-red-100/70 px-3 py-2 text-sm text-red-700">{error}</div> : null}
       {success ? <div className="border border-mint/40 bg-green-100/60 px-3 py-2 text-sm text-mint">{success}</div> : null}
 
@@ -234,71 +215,55 @@ export function HousePageClient({ initialData }: { initialData: HouseTrackerData
         </div>
       </section>
 
-      {activeTab === "property" ? (
-        <PropertyDetailsForm form={form} setForm={setForm} pending={pending} onSave={onSaveProfile} />
+      {activeTab === "dashboard" ? (
+        <HouseDashboard
+          data={data}
+          monthKey={monthKey}
+          onMonthKey={setMonthKey}
+          onOpenSection={(sectionId) => setActiveTab(sectionId)}
+        />
       ) : null}
 
-      {activeTab === "purchase" ? (
-        <PurchasePaymentsTab
-          key={data.profile.id}
+      {sectionTab ? (
+        <HouseSectionLedger
+          key={`${data.profile.id}-${sectionTab}-${entrySavedTick}`}
+          sectionId={sectionTab}
           data={data}
-          form={form}
-          setForm={setForm}
+          monthKey={monthKey}
+          onMonthKey={setMonthKey}
           pending={pending}
-          onSaveTargets={onSaveProfile}
-          onSavePayment={(payload, editingId) => {
-            const fd = new FormData();
-            fd.set("houseId", data.profile.id);
-            fd.set("date", payload.date);
-            fd.set("category", payload.category);
-            fd.set("customLabel", payload.customLabel);
-            fd.set("amount", payload.amount);
-            fd.set("note", payload.note);
-            fd.set("kind", "purchase");
-            startTransition(async () => {
-              const result = editingId
-                ? await updateHouseExpense(editingId, fd)
-                : await addHouseExpense(fd);
-              applyResult(result, editingId ? "Payment updated" : "Payment added");
-            });
-          }}
-          onDeletePayment={(id) => {
-            if (!confirm("Delete this payment entry?")) return;
+          onSave={saveEntry}
+          onDelete={(id) => {
             startTransition(async () => {
               const result = await deleteHouseExpense(id);
-              applyResult(result, "Payment deleted");
+              applyResult(result, "Entry deleted", undefined, true);
+            });
+          }}
+          onSaveFacts={(facts) => {
+            setForm((prev) => ({ ...prev, ...facts }));
+            const fd = buildProfileFormData();
+            fd.set("purchaseDate", facts.purchaseDate);
+            fd.set("purchasePrice", facts.purchasePrice);
+            fd.set("superBuiltupArea", facts.superBuiltupArea);
+            startTransition(async () => {
+              const result = await updateHouseProfile(fd);
+              applyResult(result, "Purchase facts saved");
+            });
+          }}
+          onToggleFlag={(flag, value) => {
+            const fd = new FormData();
+            fd.set("houseId", data.profile.id);
+            fd.set(flag, value ? "true" : "false");
+            startTransition(async () => {
+              const result = await updateHouseFlags(fd);
+              applyResult(result, "Saved");
             });
           }}
         />
       ) : null}
 
-      {activeTab === "living" ? (
-        <LivingExpensesTab
-          key={data.profile.id}
-          data={data}
-          pending={pending}
-          onSaveBudget={(value) => {
-            const fd = new FormData();
-            fd.set("houseId", data.profile.id);
-            fd.set("monthlyBudget", value);
-            startTransition(async () => {
-              const result = await updateHouseBudget(fd);
-              if (applyResult(result, "Budget saved")) {
-                setForm((prev) => ({ ...prev, monthlyBudget: value }));
-              }
-            });
-          }}
-          onSaveMonth={(monthKey, rows) => {
-            const fd = new FormData();
-            fd.set("houseId", data.profile.id);
-            fd.set("monthKey", monthKey);
-            fd.set("rowsJson", JSON.stringify(rows));
-            startTransition(async () => {
-              const result = await upsertLivingMonth(fd);
-              applyResult(result, "Living expenses saved");
-            });
-          }}
-        />
+      {activeTab === "property" ? (
+        <PropertyDetailsForm form={form} setForm={setForm} pending={pending} onSave={onSaveProfile} />
       ) : null}
 
       {activeTab === "contacts" ? (

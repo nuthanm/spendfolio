@@ -1,3 +1,5 @@
+import { shiftMonthKey } from "@/lib/house";
+
 export const MONTH_OPTIONS = [
   { value: "01", label: "January" },
   { value: "02", label: "February" },
@@ -39,6 +41,64 @@ export function NumberField({
       />
       {hint ? <span className="mt-1 block text-[11px] text-ink-soft">{hint}</span> : null}
     </label>
+  );
+}
+
+export function formatEntryDate(value: string) {
+  if (!value) return "—";
+  const date = new Date(`${value}T00:00:00`);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
+}
+
+export function MonthNavigator({
+  monthKey,
+  onChange,
+}: {
+  monthKey: string;
+  onChange: (monthKey: string) => void;
+}) {
+  const [year, month] = monthKey.split("-");
+  const current = new Date().getFullYear();
+  const years = new Set<number>();
+  for (let value = current - 12; value <= current + 1; value += 1) years.add(value);
+  if (year) years.add(Number(year));
+
+  return (
+    <div className="flex flex-wrap items-end gap-2">
+      <button type="button" className="btn-secondary px-3 py-2 text-sm" onClick={() => onChange(shiftMonthKey(monthKey, -1))}>
+        Previous
+      </button>
+      <label className="block">
+        <span className="mb-1 block text-xs text-ink-soft">Month</span>
+        <select className="field" value={month} onChange={(e) => onChange(`${year}-${e.target.value}`)}>
+          {MONTH_OPTIONS.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label className="block">
+        <span className="mb-1 block text-xs text-ink-soft">Year</span>
+        <select
+          className="field"
+          value={year}
+          onChange={(e) => onChange(`${e.target.value}-${month || "01"}`)}
+        >
+          {[...years]
+            .sort((a, b) => b - a)
+            .map((value) => (
+              <option key={value} value={String(value)}>
+                {value}
+              </option>
+            ))}
+        </select>
+      </label>
+      <button type="button" className="btn-secondary px-3 py-2 text-sm" onClick={() => onChange(shiftMonthKey(monthKey, 1))}>
+        Next
+      </button>
+    </div>
   );
 }
 

@@ -172,11 +172,14 @@ model HouseExpense {
   kind        String       @default("purchase") // purchase | living | maintenance
   category    String
   customLabel String       @default("")
-  amount      Float
-  note        String       @default("")
-  recurring   Boolean      @default(false)
-  createdAt   DateTime     @default(now())
-  updatedAt   DateTime     @updatedAt
+  amount       Float
+  note         String       @default("")
+  quantity     Float?
+  unit         String       @default("") // g | kg | L
+  quantityText String       @default("") // free-text quantity when no unit fits
+  recurring    Boolean      @default(false)
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
 
   @@index([userId, houseId])
   @@index([userId, date])
