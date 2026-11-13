@@ -6,7 +6,7 @@ export default function DashboardPage() {
   return (
     <Suspense
       fallback={
-        <AppShell title="Dashboard" subtitle="Loading your monthly math…">
+        <AppShell title="Home" subtitle="Loading your monthly math…">
           <p className="font-mono text-sm text-ink-soft">Calculating…</p>
         </AppShell>
       }

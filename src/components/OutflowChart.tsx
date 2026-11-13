@@ -397,7 +397,7 @@ function ViewButton({
       onClick={onClick}
       aria-pressed={active}
       className={`px-3 py-1.5 font-mono text-[11px] uppercase tracking-wider ${
-        active ? "bg-ink text-white" : "border border-line bg-white/60 text-ink-soft"
+        active ? "bg-ink text-on-ink" : "border border-line bg-white/60 text-ink-soft"
       }`}
     >
       {children}

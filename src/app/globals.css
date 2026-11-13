@@ -1,23 +1,75 @@
 @import "tailwindcss";
 
 :root {
+  /* Ledger Mint, light. Text colours meet 4.5:1 on --paper. */
   --paper: #e7f1ec;
   --paper-deep: #d5e6de;
+  --card: #ffffff;
   --ink: #14241e;
   --ink-soft: #3d5249;
+  --on-ink: #f6fbf8;
   --line: #b7cfc4;
-  --mint: #1a8f6e;
-  --mint-bright: #24b089;
-  --gold: #b8892d;
-  --coral: #d4553a;
-  --safe: #1a8f6e;
-  --debt: #d4553a;
-  --warn: #c47a1a;
-  --surface: rgba(255, 255, 255, 0.55);
-  --surface-solid: #f4faf7;
+  --mint: #146b53;
+  --mint-bright: #1a8f6e;
+  --gold: #7d5a14;
+  --coral: #a83c26;
+  --safe: #146b53;
+  --debt: #a83c26;
+  --warn: #8a520c;
+  --surface-solid: #f6fbf8;
   --shadow-soft: 0 18px 50px rgba(20, 36, 30, 0.08);
+  --wash-a: rgba(36, 176, 137, 0.14);
+  --wash-b: rgba(184, 137, 45, 0.1);
   --background: var(--paper);
   --foreground: var(--ink);
+  color-scheme: light;
+}
+
+/* Ledger Mint, dark: used when the device prefers dark (unless the user picked light), or when picked. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #0e1814;
+    --paper-deep: #24372f;
+    --card: #15231e;
+    --ink: #e4f0ea;
+    --ink-soft: #a7bfb4;
+    --on-ink: #0e1814;
+    --line: #2b4038;
+    --mint: #5fd3ab;
+    --mint-bright: #3fb48c;
+    --gold: #e0b860;
+    --coral: #f4a08c;
+    --safe: #7fe0bd;
+    --debt: #f4a08c;
+    --warn: #f0c27a;
+    --surface-solid: #15231e;
+    --shadow-soft: 0 18px 50px rgba(0, 0, 0, 0.35);
+    --wash-a: rgba(63, 180, 140, 0.1);
+    --wash-b: rgba(224, 184, 96, 0.06);
+    color-scheme: dark;
+  }
+}
+
+:root[data-theme="dark"] {
+  --paper: #0e1814;
+  --paper-deep: #24372f;
+  --card: #15231e;
+  --ink: #e4f0ea;
+  --ink-soft: #a7bfb4;
+  --on-ink: #0e1814;
+  --line: #2b4038;
+  --mint: #5fd3ab;
+  --mint-bright: #3fb48c;
+  --gold: #e0b860;
+  --coral: #f4a08c;
+  --safe: #7fe0bd;
+  --debt: #f4a08c;
+  --warn: #f0c27a;
+  --surface-solid: #15231e;
+  --shadow-soft: 0 18px 50px rgba(0, 0, 0, 0.35);
+  --wash-a: rgba(63, 180, 140, 0.1);
+  --wash-b: rgba(224, 184, 96, 0.06);
+  color-scheme: dark;
 }
 
 @theme inline {
@@ -27,6 +79,7 @@
   --color-paper-deep: var(--paper-deep);
   --color-ink: var(--ink);
   --color-ink-soft: var(--ink-soft);
+  --color-on-ink: var(--on-ink);
   --color-line: var(--line);
   --color-mint: var(--mint);
   --color-mint-bright: var(--mint-bright);
@@ -36,8 +89,11 @@
   --color-debt: var(--debt);
   --color-warn: var(--warn);
   --color-surface: var(--surface-solid);
-  --font-sans: var(--font-display);
-  --font-mono: var(--font-mono);
+  /* Cards across the app use bg-white/NN; in dark mode "white" becomes the dark card colour. */
+  --color-white: var(--card);
+  --font-sans: var(--font-inter);
+  --font-display: var(--font-syne);
+  --font-mono: var(--font-plex);
 }
 
 * {
@@ -51,27 +107,33 @@ html {
 body {
   background: var(--paper);
   color: var(--ink);
-  font-family: var(--font-display), sans-serif;
+  font-family: var(--font-inter), system-ui, sans-serif;
   min-height: 100vh;
 }
 
+h1,
+h2,
+h3 {
+  font-family: var(--font-syne), var(--font-inter), sans-serif;
+}
+
 ::selection {
-  background: rgba(26, 143, 110, 0.22);
+  background: color-mix(in oklab, var(--mint-bright) 25%, transparent);
   color: var(--ink);
 }
 
 .ledger-grid {
   background-image:
-    linear-gradient(rgba(183, 207, 196, 0.35) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(183, 207, 196, 0.35) 1px, transparent 1px);
+    linear-gradient(color-mix(in oklab, var(--line) 35%, transparent) 1px, transparent 1px),
+    linear-gradient(90deg, color-mix(in oklab, var(--line) 35%, transparent) 1px, transparent 1px);
   background-size: 48px 48px;
 }
 
 .formula-wash {
   background:
-    radial-gradient(ellipse 80% 60% at 15% 20%, rgba(36, 176, 137, 0.14), transparent 55%),
-    radial-gradient(ellipse 70% 50% at 85% 75%, rgba(184, 137, 45, 0.1), transparent 50%),
-    linear-gradient(165deg, #e7f1ec 0%, #dfece6 45%, #e9f3ee 100%);
+    radial-gradient(ellipse 80% 60% at 15% 20%, var(--wash-a), transparent 55%),
+    radial-gradient(ellipse 70% 50% at 85% 75%, var(--wash-b), transparent 50%),
+    var(--paper);
 }
 
 .number-tick {
@@ -117,10 +179,11 @@ body {
   }
 }
 
+/* Short and subtle: content is readable almost immediately. */
 @keyframes rise-in {
   from {
-    opacity: 0;
-    transform: translateY(14px);
+    opacity: 0.4;
+    transform: translateY(6px);
   }
   to {
     opacity: 1;
@@ -138,19 +201,19 @@ body {
 }
 
 .anim-rise {
-  animation: rise-in 0.7s ease-out both;
+  animation: rise-in 0.3s ease-out both;
 }
 
 .anim-rise-delay-1 {
-  animation: rise-in 0.7s ease-out 0.12s both;
+  animation: rise-in 0.3s ease-out 0.04s both;
 }
 
 .anim-rise-delay-2 {
-  animation: rise-in 0.7s ease-out 0.24s both;
+  animation: rise-in 0.3s ease-out 0.08s both;
 }
 
 .anim-rise-delay-3 {
-  animation: rise-in 0.7s ease-out 0.36s both;
+  animation: rise-in 0.3s ease-out 0.12s both;
 }
 
 .formula-float {
@@ -172,33 +235,33 @@ body {
 
 .highlight-renewal {
   box-shadow: inset 3px 0 0 var(--coral);
-  background: linear-gradient(90deg, rgba(212, 85, 58, 0.08), transparent 70%);
+  background: linear-gradient(90deg, color-mix(in oklab, var(--coral) 10%, transparent), transparent 70%);
 }
 
 .highlight-recurring {
-  box-shadow: inset 3px 0 0 #e67e22;
-  background: linear-gradient(90deg, rgba(230, 126, 34, 0.12), transparent 70%);
-  border-color: rgba(230, 126, 34, 0.35);
+  box-shadow: inset 3px 0 0 var(--warn);
+  background: linear-gradient(90deg, color-mix(in oklab, var(--warn) 12%, transparent), transparent 70%);
+  border-color: color-mix(in oklab, var(--warn) 35%, transparent);
 }
 
 .status-safe {
   color: var(--safe);
-  background: rgba(26, 143, 110, 0.12);
+  background: color-mix(in oklab, var(--safe) 14%, transparent);
 }
 
 .status-debt {
   color: var(--debt);
-  background: rgba(212, 85, 58, 0.12);
+  background: color-mix(in oklab, var(--debt) 14%, transparent);
 }
 
 .status-tight {
   color: var(--warn);
-  background: rgba(196, 122, 26, 0.14);
+  background: color-mix(in oklab, var(--warn) 16%, transparent);
 }
 
 .tile-spend {
-  background: linear-gradient(145deg, rgba(255, 255, 255, 0.7), rgba(244, 250, 247, 0.9));
-  border: 1px solid rgba(183, 207, 196, 0.7);
+  background: color-mix(in oklab, var(--card) 80%, transparent);
+  border: 1px solid color-mix(in oklab, var(--line) 70%, transparent);
   transition: transform 0.25s ease, border-color 0.25s ease;
 }
 
@@ -209,12 +272,12 @@ body {
 
 .btn-primary {
   background: var(--ink);
-  color: #f4faf7;
+  color: var(--on-ink);
   transition: background 0.2s ease, transform 0.2s ease;
 }
 
 .btn-primary:hover {
-  background: #1f3a30;
+  background: color-mix(in oklab, var(--ink) 86%, var(--mint-bright));
   transform: translateY(-1px);
 }
 
@@ -227,7 +290,7 @@ body {
 
 .btn-secondary:hover {
   border-color: var(--mint);
-  background: rgba(26, 143, 110, 0.06);
+  background: color-mix(in oklab, var(--mint-bright) 8%, transparent);
 }
 
 .field {
@@ -235,7 +298,7 @@ body {
   max-width: 100%;
   min-width: 0;
   border: 1px solid var(--line);
-  background: rgba(255, 255, 255, 0.65);
+  background: color-mix(in oklab, var(--card) 70%, transparent);
   padding: 0.75rem 0.9rem;
   color: var(--ink);
   outline: none;
@@ -244,7 +307,7 @@ body {
 
 .field:focus {
   border-color: var(--mint);
-  box-shadow: 0 0 0 3px rgba(26, 143, 110, 0.15);
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--mint-bright) 22%, transparent);
 }
 
 .app-nav a[data-active="true"] {
@@ -279,7 +342,7 @@ body {
 }
 
 .mobile-nav-link[data-active="true"] {
-  background: rgba(26, 143, 110, 0.1);
+  background: color-mix(in oklab, var(--mint-bright) 12%, transparent);
 }
 
 .sr-only {
@@ -307,4 +370,50 @@ body {
   line-height: 1.2;
   font-size: 1.5rem;
   font-size: min(1.875rem, calc(100cqi / 7.4));
+}
+
+/* Keyboard focus that is visible on both themes. */
+:focus-visible {
+  outline: 2px solid var(--mint);
+  outline-offset: 2px;
+}
+
+/* Bottom sheet on phones, centred dialog on larger screens. */
+dialog.sheet {
+  margin: auto auto 0;
+  width: 100%;
+  max-width: 32rem;
+  max-height: 92dvh;
+  border: 1px solid var(--line);
+  border-radius: 1.5rem 1.5rem 0 0;
+  background: var(--surface-solid);
+  color: var(--ink);
+  padding: 0;
+}
+
+dialog.sheet::backdrop {
+  background: rgba(0, 0, 0, 0.45);
+}
+
+@media (min-width: 768px) {
+  dialog.sheet {
+    margin: auto;
+    border-radius: 1.5rem;
+  }
+}
+
+/* People who ask their device for less motion get none. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  .formula-float {
+    display: none;
+  }
 }

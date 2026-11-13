@@ -1,16 +1,18 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useEffect, useId, useRef, useState, useTransition } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { AppShell } from "@/components/AppShell";
 import { AnimatedNumber } from "@/components/AnimatedNumber";
+import { DATA_CHANGED_EVENT } from "@/components/QuickAddSheet";
+import { Badge, Card, CardHeader, MiniStat, ProgressBar, type Tone } from "@/components/ui";
+import { CloseIcon } from "@/components/icons";
 import { getDashboardData } from "@/lib/actions/dashboard";
 import { recordRecurringDebit } from "@/lib/actions/expenses";
 import { OutflowChart } from "@/components/OutflowChart";
 import { formatINR } from "@/lib/finance";
 
 type Dash = Awaited<ReturnType<typeof getDashboardData>>;
-type Tile = Dash["tiles"][number];
 type RecurringTile = Dash["recurringTiles"][number];
 
 type RecurringEditState = {
@@ -22,6 +24,30 @@ type RecurringEditState = {
   remarks: string;
   customFields: string;
 };
+
+const STATUS_TONE: Record<Dash["health"]["status"], Tone> = {
+  safe: "safe",
+  tight: "tight",
+  debt: "debt",
+};
+
+const STATUS_LABEL: Record<Dash["health"]["status"], string> = {
+  safe: "On track",
+  tight: "Tight",
+  debt: "Over budget",
+};
+
+function previousMonthKey(key: string) {
+  const [y, m] = key.split("-").map(Number);
+  const d = new Date(y, m - 2, 1);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+}
+
+function daysLeftInCurrentMonth() {
+  const now = new Date();
+  const last = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+  return last - now.getDate() + 1;
+}
 
 export default function DashboardClient({
   readOnly = false,
@@ -36,13 +62,12 @@ export default function DashboardClient({
   const router = useRouter();
   const initialMonth = search.get("month") || undefined;
   const initialFy = search.get("fy") || undefined;
-  const [data, setData] = useState<Dash | null>(readOnly ? initialData : null);
+  const [fetched, setData] = useState<Dash | null>(null);
+  // The shared read-only view is handed its data; signed-in owners fetch it here.
+  const data = readOnly ? initialData : fetched;
   const [pending, startTransition] = useTransition();
-  const [hoveredLabel, setHoveredLabel] = useState<string | null>(null);
-  const [selectedLabel, setSelectedLabel] = useState<string | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
   const [recurringEdit, setRecurringEdit] = useState<RecurringEditState | null>(null);
-  const [recurringError, setRecurringError] = useState<string | null>(null);
-  const [savingRecurring, setSavingRecurring] = useState(false);
   const [recurringSavedFlash, setRecurringSavedFlash] = useState(false);
 
   useEffect(() => {
@@ -50,7 +75,6 @@ export default function DashboardClient({
       if (!initialData && process.env.NODE_ENV === "development") {
         console.warn("DashboardClient: readOnly is set without initial summary data.");
       }
-      setData(initialData);
       return undefined;
     }
     let active = true;
@@ -58,16 +82,18 @@ export default function DashboardClient({
       const d = await getDashboardData(initialMonth, initialFy);
       if (!active) return;
       setData(d);
-      setHoveredLabel(null);
-      setSelectedLabel(null);
-      setRecurringEdit(null);
-      setRecurringError(null);
-      setRecurringSavedFlash(false);
     });
     return () => {
       active = false;
     };
-  }, [readOnly, initialData, initialMonth, initialFy]);
+  }, [readOnly, initialData, initialMonth, initialFy, reloadKey]);
+
+  useEffect(() => {
+    if (readOnly) return undefined;
+    const onChanged = () => setReloadKey((key) => key + 1);
+    window.addEventListener(DATA_CHANGED_EVENT, onChanged);
+    return () => window.removeEventListener(DATA_CHANGED_EVENT, onChanged);
+  }, [readOnly]);
 
   function startRecurringEdit(tile: RecurringTile) {
     if (readOnly) return;
@@ -80,37 +106,6 @@ export default function DashboardClient({
       remarks: tile.remarks || "",
       customFields: tile.customFields || "{}",
     });
-    setRecurringError(null);
-  }
-
-  async function saveRecurringEdit(e: React.FormEvent) {
-    e.preventDefault();
-    if (readOnly || !recurringEdit) return;
-
-    const fd = new FormData();
-    fd.set("date", recurringEdit.date);
-    fd.set("label", recurringEdit.title.trim());
-    fd.set("amount", recurringEdit.amount);
-    fd.set("remarks", recurringEdit.remarks);
-    fd.set("recurring", "true");
-    fd.set("renewalDate", recurringEdit.nextDate);
-    fd.set("customFields", recurringEdit.customFields || "{}");
-
-    setSavingRecurring(true);
-    setRecurringError(null);
-    const res = await recordRecurringDebit(recurringEdit.id, fd);
-    if (res?.error) {
-      setRecurringError(res.error);
-      setSavingRecurring(false);
-      return;
-    }
-
-    const refreshed = await getDashboardData(initialMonth, initialFy);
-    setData(refreshed);
-    setRecurringEdit(null);
-    setSavingRecurring(false);
-    setRecurringSavedFlash(true);
-    setTimeout(() => setRecurringSavedFlash(false), 1800);
   }
 
   function pushDashboardQuery(next: { month?: string; fy?: string }) {
@@ -128,481 +123,570 @@ export default function DashboardClient({
       return <p className="font-mono text-sm text-ink-soft">No summary for this view.</p>;
     }
     return (
-      <AppShell title="Dashboard" subtitle="Loading your monthly math…">
+      <AppShell title="Home" subtitle="Loading your monthly math…">
         <p className="font-mono text-sm text-ink-soft">Calculating…</p>
       </AppShell>
     );
   }
 
-  const dashboard = (
-    <>
-      {readOnly ? <h2 className="mb-4 text-xl font-bold text-ink">Summaries</h2> : null}
-      <div className="mb-6 flex flex-col gap-3 anim-rise sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
-        <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
-          <label className="flex min-w-0 items-center gap-3">
-            <span className="shrink-0 font-mono text-[11px] uppercase tracking-wider text-ink-soft">
-              Month
-            </span>
-            <select
-              className="field w-auto py-2"
-              value={data.monthKey}
-              disabled={pending}
-              onChange={(e) =>
-                pushDashboardQuery({
-                  month: e.target.value,
-                  fy: String(data.financialYear.selectedStartYear),
-                })
-              }
-            >
-              {data.months.map((m) => (
-                <option key={m.key} value={m.key}>
-                  {m.label}
-                </option>
-              ))}
-            </select>
-          </label>
+  const recurringById = new Map(data.recurringTiles.map((tile) => [tile.id, tile]));
 
-          <label className="flex min-w-0 items-center gap-3">
-            <span className="shrink-0 font-mono text-[11px] uppercase tracking-wider text-ink-soft">
-              Financial year
-            </span>
-            <select
-              className="field w-auto py-2"
-              value={String(data.financialYear.selectedStartYear)}
-              disabled={pending}
-              onChange={(e) =>
-                pushDashboardQuery({
-                  month: data.monthKey,
-                  fy: e.target.value,
-                })
-              }
-            >
-              {data.financialYear.options.map((fy) => (
-                <option key={fy.startYear} value={fy.startYear}>
-                  {fy.label}
-                </option>
-              ))}
-            </select>
-          </label>
-        </div>
-        <span className="font-mono text-xs text-ink-soft">
-          {data.isCurrent ? "Showing current month" : `Historical view · ${data.monthLabel}`}
-        </span>
+  const dashboard = (
+    <div className="flex flex-col gap-5">
+      {readOnly ? <h2 className="text-xl font-bold text-ink">Summaries</h2> : null}
+
+      <PeriodPicker data={data} pending={pending} onChange={pushDashboardQuery} />
+
+      <BufferHero data={data} />
+
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
+        <WhereItWent data={data} />
+        <ComingUp
+          data={data}
+          readOnly={readOnly}
+          onEditRecurring={(id) => {
+            const tile = recurringById.get(id);
+            if (tile) startRecurringEdit(tile);
+          }}
+          savedFlash={recurringSavedFlash}
+        />
+        <VersusLastMonth data={data} />
       </div>
 
-      <section className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4 anim-rise-delay-1">
-        <Stat label="Income" value={data.incomeTotal} note="all sources" />
-        <Stat label="Expenses" value={data.expenseTotal} note="this month" />
-        <Stat label="Buffer" value={data.health.balance} note="income − expenses" accent />
-        <div className="summary-tile border border-line bg-white/50 p-5">
-          <p className="font-mono text-[11px] uppercase tracking-wider text-ink-soft">Status</p>
-          <p
-            className={`mt-3 inline-block px-3 py-1 text-sm font-semibold status-${data.health.status}`}
-          >
-            {data.health.label}
-          </p>
-          <p className="mt-3 text-sm text-ink-soft">{data.health.note}</p>
-        </div>
-      </section>
+      <HouseSummary data={data} />
 
-      {data.house.currentMonthExpenses > 0 || data.house.totalExpenses > 0 || data.house.loanInfo.sanctioned > 0 ? (
-        <section className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4 anim-rise-delay-1">
-          {data.house.currentMonthExpenses > 0 ? (
-            <Stat label="House (Current Month)" value={data.house.currentMonthExpenses} note="this month" />
-          ) : null}
-          {data.house.totalExpenses > 0 ? (
-            <Stat label="House (Total)" value={data.house.totalExpenses} note="all months" />
-          ) : null}
-          {data.house.loanInfo.sanctioned > 0 ? (
-            <div className="summary-tile border border-line bg-white/50 p-5">
-              <p className="font-mono text-[11px] uppercase tracking-wider text-ink-soft">Loan Outstanding</p>
-              <p className="mt-3 font-mono text-sm text-ink">
-                <span className="whitespace-nowrap">{formatINR(data.house.loanInfo.outstanding)}</span>
-                {" / "}
-                <span className="whitespace-nowrap">{formatINR(data.house.loanInfo.sanctioned)}</span>
-              </p>
-              <p className="mt-1 text-xs text-ink-soft">{data.house.loanInfo.percentagePending}% pending</p>
-            </div>
-          ) : null}
-          {data.house.loanInfo.emorTotal > 0 ? (
-            <div className="summary-tile border border-line bg-white/50 p-5">
-              <p className="font-mono text-[11px] uppercase tracking-wider text-ink-soft">EMI Remaining</p>
-              <p className="mt-3 font-mono text-sm text-ink">
-                {data.house.loanInfo.emorOutstanding} / {data.house.loanInfo.emorTotal}
-              </p>
-              <p className="mt-1 text-xs text-ink-soft">months</p>
-            </div>
-          ) : null}
-        </section>
+      <RecentWithRemarks data={data} readOnly={readOnly} />
+
+      <YearView data={data} />
+
+      {!readOnly ? (
+        <RecurringEditDialog
+          edit={recurringEdit}
+          onChange={setRecurringEdit}
+          onClose={() => setRecurringEdit(null)}
+          onSaved={async () => {
+            const refreshed = await getDashboardData(initialMonth, initialFy);
+            setData(refreshed);
+            setRecurringEdit(null);
+            setRecurringSavedFlash(true);
+            setTimeout(() => setRecurringSavedFlash(false), 2400);
+          }}
+        />
       ) : null}
-
-      <section className="mt-10 anim-rise-delay-1">
-        <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
-          <h2 className="text-xl font-bold text-ink">{data.financialYear.selectedLabel} summary</h2>
-          <p className="font-mono text-xs text-ink-soft">
-            Apr to Mar view across {data.financialYear.months.length} months
-          </p>
-        </div>
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
-          <div className="summary-tile border border-mint/35 bg-gradient-to-b from-white/80 to-mint/5 p-5 shadow-[0_10px_24px_rgba(26,143,110,0.08)]">
-            <p className="font-mono text-[11px] uppercase tracking-wider text-mint">FY Income</p>
-            <p className="summary-value number-tick mt-3 font-bold text-mint">
-              <AnimatedNumber value={data.financialYear.totals.income} format={(n) => formatINR(n)} />
-            </p>
-            <p className="mt-2 font-mono text-xs text-ink-soft">{data.financialYear.months.length}-month inflow</p>
-          </div>
-          <div className="summary-tile border border-coral/35 bg-gradient-to-b from-white/80 to-coral/5 p-5 shadow-[0_10px_24px_rgba(212,85,58,0.08)]">
-            <p className="font-mono text-[11px] uppercase tracking-wider text-coral">FY Expenses</p>
-            <p className="summary-value number-tick mt-3 font-bold text-coral">
-              <AnimatedNumber value={data.financialYear.totals.expense} format={(n) => formatINR(n)} />
-            </p>
-            <p className="mt-2 font-mono text-xs text-ink-soft">{data.financialYear.months.length}-month outflow</p>
-          </div>
-          <div className={`summary-tile border p-5 shadow-[0_10px_24px_rgba(20,36,30,0.08)] ${data.financialYear.totals.profit >= 0 ? "border-mint/35 bg-gradient-to-b from-white/80 to-mint/5" : "border-coral/35 bg-gradient-to-b from-white/80 to-coral/5"}`}>
-            <p className="font-mono text-[11px] uppercase tracking-wider text-ink-soft">FY P/L</p>
-            <p className={`summary-value number-tick mt-3 font-bold ${data.financialYear.totals.profit >= 0 ? "text-mint" : "text-coral"}`}>
-              <AnimatedNumber value={data.financialYear.totals.profit} format={(n) => formatINR(n)} />
-            </p>
-            <p className="mt-2 font-mono text-xs text-ink-soft">Net position</p>
-          </div>
-          <div className="summary-tile border border-line bg-white/75 p-5 shadow-[0_10px_24px_rgba(20,36,30,0.05)]">
-            <p className="font-mono text-[11px] uppercase tracking-wider text-ink-soft">FY Trend</p>
-            <p className="mt-2 font-mono text-sm text-ink-soft">
-              Avg P/L <span className="whitespace-nowrap">{formatINR(data.financialYear.totals.averageMonthlyProfit)}</span> / month
-            </p>
-            <p className="mt-2 text-sm text-mint">
-              Best {data.financialYear.bestMonth.shortLabel}:{" "}
-              <span className="whitespace-nowrap">{formatINR(data.financialYear.bestMonth.profit)}</span>
-            </p>
-            <p className="mt-1 text-sm text-coral">
-              Worst {data.financialYear.worstMonth.shortLabel}:{" "}
-              <span className="whitespace-nowrap">{formatINR(data.financialYear.worstMonth.profit)}</span>
-            </p>
-          </div>
-        </div>
-      </section>
-
-      <OutflowChart analysis={data.outflow} periodLabel={data.financialYear.selectedLabel} />
-
-      <section className="mt-10 anim-rise-delay-2">
-        <div className="mb-4 flex flex-wrap items-end justify-between gap-2">
-          <h2 className="text-xl font-bold text-ink">Month on month profit / loss</h2>
-          <p className="font-mono text-xs text-ink-soft">ledger view · {data.financialYear.selectedLabel}</p>
-        </div>
-        <MonthPnLGraph months={data.financialYear.months} />
-      </section>
-
-      {data.recurringTiles.length > 0 ? (
-        <section className="mt-10 anim-rise-delay-2">
-          <div className="mb-4 flex flex-wrap items-end justify-between gap-2">
-            <h2 className="text-xl font-bold text-ink">Upcoming recurring</h2>
-            <p className="font-mono text-xs text-[#c45f12]">
-              {readOnly ? "orange · upcoming" : "orange · click card to edit"}
-            </p>
-          </div>
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            {data.recurringTiles.map((tile) => {
-              const card = (
-              <>
-                <p className="text-sm font-semibold text-ink">{tile.title}</p>
-                <p className="mt-1 font-mono text-lg font-bold text-ink">
-                  {formatINR(tile.amount)}
-                </p>
-                <p className="mt-1 font-mono text-[11px] text-[#c45f12]">
-                  next {tile.nextDate}
-                  {tile.daysLeft <= 30 ? ` · ${tile.daysLeft}d` : ""}
-                </p>
-                {tile.remarks ? (
-                  <p className="mt-1 line-clamp-2 text-xs text-ink-soft">{tile.remarks}</p>
-                ) : null}
-                {readOnly ? null : (
-                <p className="mt-2 font-mono text-[10px] uppercase tracking-wide text-[#c45f12]">
-                  edit and save
-                </p>
-                )}
-              </>
-              );
-              if (readOnly) {
-                return (
-                  <div key={tile.id} className="border border-[#e67e22]/40 bg-[rgba(230,126,34,0.08)] p-3">
-                    {card}
-                  </div>
-                );
-              }
-              return (
-              <button
-                key={tile.id}
-                type="button"
-                onClick={() => startRecurringEdit(tile)}
-                className="border border-[#e67e22]/40 bg-[rgba(230,126,34,0.08)] p-3"
-              >
-                {card}
-              </button>
-              );
-            })}
-          </div>
-
-          {recurringSavedFlash ? (
-            <p className="mt-3 inline-block border border-mint/40 bg-mint/10 px-3 py-1 font-mono text-xs text-mint">
-              Saved to Expenses and next recurring updated.
-            </p>
-          ) : null}
-
-          {!readOnly && recurringEdit ? (
-            <form
-              className="mt-4 border border-[#e67e22]/40 bg-[rgba(230,126,34,0.08)] p-4"
-              onSubmit={saveRecurringEdit}
-            >
-              <div className="mb-3 flex items-start justify-between gap-3">
-                <div>
-                  <p className="text-sm font-semibold text-ink">Edit recurring entry</p>
-                  <p className="text-xs text-ink-soft">{recurringEdit.title}</p>
-                </div>
-                <button
-                  type="button"
-                  className="text-xs text-ink-soft hover:text-ink"
-                  onClick={() => {
-                    setRecurringEdit(null);
-                    setRecurringError(null);
-                  }}
-                >
-                  Cancel
-                </button>
-              </div>
-
-              <div className="grid gap-3 md:grid-cols-4">
-                <label className="block">
-                  <span className="mb-1.5 block font-mono text-[11px] uppercase tracking-wider text-ink-soft">
-                    Debited date
-                  </span>
-                  <input
-                    className="field"
-                    type="date"
-                    required
-                    value={recurringEdit.date}
-                    onChange={(e) =>
-                      setRecurringEdit((current) =>
-                        current ? { ...current, date: e.target.value } : current,
-                      )
-                    }
-                  />
-                </label>
-
-                <label className="block">
-                  <span className="mb-1.5 block font-mono text-[11px] uppercase tracking-wider text-ink-soft">
-                    Amount (₹)
-                  </span>
-                  <input
-                    className="field"
-                    type="number"
-                    step="any"
-                    required
-                    value={recurringEdit.amount}
-                    onChange={(e) =>
-                      setRecurringEdit((current) =>
-                        current ? { ...current, amount: e.target.value } : current,
-                      )
-                    }
-                  />
-                </label>
-
-                <label className="block">
-                  <span className="mb-1.5 block font-mono text-[11px] uppercase tracking-wider text-ink-soft">
-                    Next recurring date
-                  </span>
-                  <input
-                    className="field"
-                    type="date"
-                    required
-                    value={recurringEdit.nextDate}
-                    onChange={(e) =>
-                      setRecurringEdit((current) =>
-                        current ? { ...current, nextDate: e.target.value } : current,
-                      )
-                    }
-                  />
-                </label>
-
-                <label className="block md:col-span-4">
-                  <span className="mb-1.5 block font-mono text-[11px] uppercase tracking-wider text-ink-soft">
-                    Remarks
-                  </span>
-                  <textarea
-                    className="field min-h-20 resize-y"
-                    value={recurringEdit.remarks}
-                    onChange={(e) =>
-                      setRecurringEdit((current) =>
-                        current ? { ...current, remarks: e.target.value } : current,
-                      )
-                    }
-                  />
-                </label>
-              </div>
-
-              {recurringError ? <p className="mt-3 text-sm text-coral">{recurringError}</p> : null}
-
-              <button
-                type="submit"
-                disabled={savingRecurring}
-                className="btn-primary mt-4 px-4 py-2 text-sm disabled:opacity-60"
-              >
-                {savingRecurring ? "Saving..." : "Save recurring entry"}
-              </button>
-            </form>
-          ) : null}
-        </section>
-      ) : null}
-
-      <section className="mt-10 anim-rise-delay-2">
-        <div className="mb-4 flex flex-wrap items-end justify-between gap-2">
-          <h2 className="text-xl font-bold text-ink">Where money went</h2>
-          <p className="font-mono text-xs text-ink-soft">
-            hover or tap a tile · {data.monthLabel}
-          </p>
-        </div>
-        {data.tiles.length === 0 ? (
-          <p className="text-sm text-ink-soft">No expenses recorded for this month yet.</p>
-        ) : (
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            {data.tiles.map((tile) => {
-              const isSelected = selectedLabel === tile.label;
-              const showPopover =
-                hoveredLabel === tile.label ||
-                (hoveredLabel === null && isSelected);
-              return (
-                <button
-                  key={tile.label}
-                  type="button"
-                  className={`tile-spend relative z-0 p-4 text-left ${
-                    showPopover ? "z-40" : ""
-                  } ${isSelected ? "border-mint" : ""}`}
-                  onClick={() =>
-                    setSelectedLabel((current) =>
-                      current === tile.label ? null : tile.label,
-                    )
-                  }
-                  onMouseEnter={() => setHoveredLabel(tile.label)}
-                  onMouseLeave={() => setHoveredLabel(null)}
-                >
-                  <div className="flex items-start justify-between gap-2">
-                    <p className="font-medium text-ink">{tile.label}</p>
-                    <span className="font-mono text-[11px] text-ink-soft">{tile.share}%</span>
-                  </div>
-                  <p className="mt-3 text-2xl font-bold number-tick text-ink">
-                    {formatINR(tile.amount)}
-                  </p>
-                  <div className="mt-3 h-1.5 w-full bg-paper-deep">
-                    <div
-                      className="h-full bg-mint"
-                      style={{ width: `${Math.min(100, tile.share * 2.8)}%` }}
-                    />
-                  </div>
-                  <p className="mt-2 font-mono text-[10px] text-ink-soft">
-                    {tile.items.length} entr{tile.items.length === 1 ? "y" : "ies"}
-                  </p>
-
-                  {showPopover ? (
-                    <div className="pointer-events-none absolute bottom-full left-1/2 z-50 mb-2 w-[min(18rem,calc(100vw-2rem))] -translate-x-1/2 rounded-xl bg-[#14241e] p-4 text-left text-white shadow-[0_18px_40px_rgba(20,36,30,0.35)]">
-                      <TilePopover tile={tile} />
-                    </div>
-                  ) : null}
-                </button>
-              );
-            })}
-          </div>
-        )}
-      </section>
-
-      <section className="mt-10 grid gap-6 lg:grid-cols-2 anim-rise-delay-3">
-        <div>
-          <h2 className="mb-4 text-xl font-bold text-ink">Renewals & reminders</h2>
-          {data.renewals.length === 0 ? (
-            <p className="text-sm text-ink-soft">No upcoming renewals in the next 45 days.</p>
-          ) : (
-            <ul className="space-y-2">
-              {data.renewals.map((r) => (
-                <li
-                  key={r.id}
-                  className={`border border-line bg-white/50 px-4 py-3 ${
-                    r.recurring
-                      ? "highlight-recurring"
-                      : r.daysLeft <= 5
-                        ? "highlight-renewal"
-                        : ""
-                  }`}
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <p className="font-medium text-ink">{r.title}</p>
-                      <p className="font-mono text-xs text-ink-soft">
-                        due {r.due}
-                        {r.daysLeft <= 5 ? ` · ${r.daysLeft}d left` : ""}
-                        {r.recurring ? " · recurring" : ""}
-                      </p>
-                      {r.remarks ? (
-                        <p className="mt-1 text-sm text-ink-soft">{r.remarks}</p>
-                      ) : null}
-                    </div>
-                    <p className="shrink-0 font-mono font-medium text-ink">{formatINR(r.amount)}</p>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-
-        <div>
-          <h2 className="mb-4 text-xl font-bold text-ink">Recent with remarks</h2>
-          {data.recent.length === 0 ? (
-            <p className="text-sm text-ink-soft">
-              {readOnly ? "No expenses yet." : "No expenses yet — add one from Expenses."}
-            </p>
-          ) : (
-            <ul className="space-y-2">
-              {data.recent.map((e) => (
-                <li
-                  key={e.id}
-                  className={`border border-line bg-white/50 px-4 py-3 ${
-                    e.recurring
-                      ? "highlight-recurring"
-                      : e.renewalDate
-                        ? "highlight-renewal"
-                        : ""
-                  }`}
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <p className="font-medium text-ink">
-                        {e.label}{" "}
-                        <span className="font-mono text-xs font-normal text-ink-soft">
-                          {e.date}
-                        </span>
-                      </p>
-                      {e.remarks ? (
-                        <p className="mt-1 text-sm text-ink-soft">{e.remarks}</p>
-                      ) : null}
-                    </div>
-                    <p className="shrink-0 font-mono text-sm font-medium">
-                      {formatINR(e.amount)}
-                    </p>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-      </section>
-    </>
+    </div>
   );
 
   if (readOnly) return dashboard;
   return (
-    <AppShell
-      title="Dashboard"
-      subtitle="Live monthly math — income, spend, buffer, and renewals that need attention."
-    >
+    <AppShell title="Home" subtitle={data.isCurrent ? undefined : `Looking back at ${data.monthLabel}`}>
       {dashboard}
     </AppShell>
+  );
+}
+
+function PeriodPicker({
+  data,
+  pending,
+  onChange,
+}: {
+  data: Dash;
+  pending: boolean;
+  onChange: (next: { month?: string; fy?: string }) => void;
+}) {
+  return (
+    <div className="flex flex-wrap items-center gap-3">
+      <label className="flex items-center gap-2">
+        <span className="whitespace-nowrap text-sm text-ink-soft">Month</span>
+        <select
+          className="field w-auto rounded-xl py-2"
+          value={data.monthKey}
+          disabled={pending}
+          onChange={(e) =>
+            onChange({ month: e.target.value, fy: String(data.financialYear.selectedStartYear) })
+          }
+        >
+          {data.months.map((m) => (
+            <option key={m.key} value={m.key}>
+              {m.label}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label className="flex items-center gap-2">
+        <span className="whitespace-nowrap text-sm text-ink-soft">Financial year</span>
+        <select
+          className="field w-auto rounded-xl py-2"
+          value={String(data.financialYear.selectedStartYear)}
+          disabled={pending}
+          onChange={(e) => onChange({ month: data.monthKey, fy: e.target.value })}
+        >
+          {data.financialYear.options.map((fy) => (
+            <option key={fy.startYear} value={fy.startYear}>
+              {fy.label}
+            </option>
+          ))}
+        </select>
+      </label>
+      {pending ? <span className="text-sm text-ink-soft">Updating…</span> : null}
+    </div>
+  );
+}
+
+function BufferHero({ data }: { data: Dash }) {
+  const { health, incomeTotal, expenseTotal, isCurrent, monthLabel } = data;
+  const tone = STATUS_TONE[health.status];
+  const spentPct = Math.round(health.ratio * 100);
+  const daysLeft = isCurrent ? daysLeftInCurrentMonth() : 0;
+  const perDay = isCurrent && health.balance > 0 ? health.balance / daysLeft : 0;
+
+  return (
+    <Card className="anim-rise p-5 md:p-7" labelledBy="buffer-heading">
+      <div className="flex flex-col gap-6 lg:flex-row lg:items-stretch">
+        <div className="flex min-w-0 flex-[2] flex-col gap-3">
+          <div className="flex flex-wrap items-center gap-2.5">
+            <h2 id="buffer-heading" className="font-sans text-sm font-medium text-ink-soft">
+              Buffer {isCurrent ? "this month" : `in ${monthLabel}`}
+            </h2>
+            <Badge tone={tone}>{STATUS_LABEL[health.status]}</Badge>
+          </div>
+          <p
+            className={`font-display text-5xl font-extrabold leading-none tracking-tight md:text-6xl ${
+              health.balance < 0 ? "text-coral" : "text-ink"
+            }`}
+          >
+            <AnimatedNumber value={health.balance} duration={700} format={(n) => formatINR(n)} />
+          </p>
+          <p className="font-mono text-xs text-ink-soft">income − expenses</p>
+          <div className="mt-1 flex flex-col gap-1.5">
+            <ProgressBar value={spentPct} tone={tone} label="Share of income spent" />
+            <div className="flex flex-wrap justify-between gap-x-4 text-sm text-ink-soft">
+              <span>{spentPct}% of income spent</span>
+              {isCurrent ? <span>{daysLeft} {daysLeft === 1 ? "day" : "days"} left</span> : null}
+            </div>
+          </div>
+          {perDay > 0 ? (
+            <p className="text-sm text-ink-soft">
+              You can spend <strong className="font-semibold text-ink">{formatINR(perDay)} a day</strong> and
+              still end the month in the green.
+            </p>
+          ) : health.balance < 0 ? (
+            <p className="text-sm text-ink-soft">
+              Expenses are <strong className="font-semibold text-ink">{formatINR(-health.balance)}</strong> more than
+              income.
+            </p>
+          ) : null}
+        </div>
+        <div className="grid flex-1 grid-cols-2 content-start gap-3">
+          <MiniStat label="Income" value={formatINR(incomeTotal)} note="all sources" />
+          <MiniStat label="Spent" value={formatINR(expenseTotal)} note={isCurrent ? "so far" : "this month"} />
+        </div>
+      </div>
+    </Card>
+  );
+}
+
+function WhereItWent({ data }: { data: Dash }) {
+  const [showAll, setShowAll] = useState(false);
+  const [openLabel, setOpenLabel] = useState<string | null>(null);
+  const tiles = showAll ? data.tiles : data.tiles.slice(0, 5);
+
+  return (
+    <Card className="anim-rise-delay-1" labelledBy="where-heading">
+      <CardHeader
+        id="where-heading"
+        title="Where it went"
+        action={
+          data.tiles.length > 5 ? (
+            <button
+              type="button"
+              className="min-h-10 text-sm font-medium text-mint hover:underline"
+              onClick={() => setShowAll((v) => !v)}
+            >
+              {showAll ? "Top 5" : `All ${data.tiles.length}`}
+            </button>
+          ) : null
+        }
+      />
+      {data.tiles.length === 0 ? (
+        <p className="text-sm text-ink-soft">No expenses recorded for {data.monthLabel} yet.</p>
+      ) : (
+        <ul className="flex flex-col gap-1">
+          {tiles.map((tile) => {
+            const open = openLabel === tile.label;
+            return (
+              <li key={tile.label}>
+                <button
+                  type="button"
+                  aria-expanded={open}
+                  onClick={() => setOpenLabel(open ? null : tile.label)}
+                  className="flex w-full flex-col gap-1.5 rounded-lg py-2 text-left hover:bg-paper-deep/40"
+                >
+                  <span className="flex w-full justify-between gap-3 text-sm">
+                    <span className="truncate font-medium text-ink">{tile.label}</span>
+                    <span className="shrink-0 font-mono text-ink-soft">
+                      {formatINR(tile.amount)} · {tile.share}%
+                    </span>
+                  </span>
+                  <ProgressBar value={tile.share} size="sm" label={`${tile.label} share of spending`} />
+                </button>
+                {open ? (
+                  <ul className="mb-2 mt-1 flex flex-col gap-1.5 rounded-lg bg-paper-deep/40 p-3">
+                    {tile.items.map((item) => (
+                      <li key={item.id} className="flex items-start justify-between gap-3 text-xs">
+                        <span className="min-w-0">
+                          <span className="block font-mono text-ink-soft">{item.date}</span>
+                          <span className="block truncate text-ink">
+                            {item.remarks?.trim() ? item.remarks : tile.label}
+                            {item.recurring ? <span className="ml-1.5 text-warn">recurring</span> : null}
+                          </span>
+                        </span>
+                        <span className="shrink-0 font-mono font-medium text-ink">{formatINR(item.amount)}</span>
+                      </li>
+                    ))}
+                  </ul>
+                ) : null}
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </Card>
+  );
+}
+
+function ComingUp({
+  data,
+  readOnly,
+  onEditRecurring,
+  savedFlash,
+}: {
+  data: Dash;
+  readOnly: boolean;
+  onEditRecurring: (id: string) => void;
+  savedFlash: boolean;
+}) {
+  const items = data.renewals.slice(0, 6);
+  return (
+    <Card className="anim-rise-delay-1" labelledBy="coming-heading">
+      <CardHeader id="coming-heading" title="Coming up" />
+      {savedFlash ? (
+        <p role="status" className="mb-2 rounded-lg bg-mint-bright/15 px-3 py-2 text-sm text-mint">
+          Recorded in Expenses. Next date updated.
+        </p>
+      ) : null}
+      {items.length === 0 ? (
+        <p className="text-sm text-ink-soft">Nothing due in the next 45 days.</p>
+      ) : (
+        <ul className="flex flex-col">
+          {items.map((r) => {
+            const urgent = r.daysLeft <= 5;
+            const editable = !readOnly && r.recurring;
+            const when =
+              r.daysLeft === 0 ? "Today" : r.daysLeft === 1 ? "Tomorrow" : `in ${r.daysLeft} days`;
+            const body = (
+              <>
+                <span className="min-w-0">
+                  <span className="block truncate text-sm font-medium text-ink">{r.title}</span>
+                  <span className={`block text-xs ${urgent ? "text-warn" : "text-ink-soft"}`}>
+                    {r.due} · {when}
+                    {r.recurring ? " · monthly" : ""}
+                  </span>
+                </span>
+                <span className="shrink-0 text-right">
+                  <span className="block font-mono text-sm text-ink">{formatINR(r.amount)}</span>
+                  {editable ? <span className="block text-xs font-medium text-mint">Record</span> : null}
+                </span>
+              </>
+            );
+            return (
+              <li key={r.id} className="border-t border-line first:border-t-0">
+                {editable ? (
+                  <button
+                    type="button"
+                    onClick={() => onEditRecurring(r.id)}
+                    className="flex w-full items-center justify-between gap-3 py-2.5 text-left hover:bg-paper-deep/40"
+                  >
+                    {body}
+                  </button>
+                ) : (
+                  <div className="flex items-center justify-between gap-3 py-2.5">{body}</div>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </Card>
+  );
+}
+
+function VersusLastMonth({ data }: { data: Dash }) {
+  const prevKey = previousMonthKey(data.monthKey);
+  const prev = data.financialYear.months.find((m) => m.key === prevKey);
+  const months = data.financialYear.months.slice(-6);
+  const maxSpend = Math.max(1, ...months.map((m) => m.expense));
+
+  return (
+    <Card className="anim-rise-delay-2" labelledBy="vs-heading">
+      <CardHeader id="vs-heading" title="Compared with last month" />
+      {prev ? (
+        <div className="flex flex-col gap-1">
+          <p className="text-sm text-ink-soft">
+            {prev.label}: <span className="font-mono text-ink">{formatINR(prev.expense)}</span> spent
+          </p>
+          <p className="text-sm text-ink-soft">
+            {data.isCurrent ? "This month so far" : data.monthLabel}:{" "}
+            <span className="font-mono text-ink">{formatINR(data.expenseTotal)}</span>
+          </p>
+          <div className="mt-1">
+            {data.expenseTotal === prev.expense ? null : data.expenseTotal < prev.expense ? (
+              <Badge tone="safe">{formatINR(prev.expense - data.expenseTotal)} less</Badge>
+            ) : (
+              <Badge tone="tight">{formatINR(data.expenseTotal - prev.expense)} more</Badge>
+            )}
+          </div>
+        </div>
+      ) : (
+        <p className="text-sm text-ink-soft">No data for the previous month in this financial year.</p>
+      )}
+      {months.length > 1 ? (
+        <figure className="mt-4">
+          <div
+            role="img"
+            aria-label={`Spending by month: ${months.map((m) => `${m.shortLabel} ${formatINR(m.expense)}`).join(", ")}`}
+            className="flex h-24 items-end gap-2"
+          >
+            {months.map((m) => (
+              <div key={m.key} className="flex h-full flex-1 flex-col items-center justify-end gap-1">
+                <div
+                  className={`w-full max-w-7 rounded-t-md ${m.key === data.monthKey ? "bg-mint-bright" : "bg-paper-deep"}`}
+                  style={{ height: `${Math.max(4, Math.round((m.expense / maxSpend) * 100))}%` }}
+                />
+                <span className="text-[11px] text-ink-soft">{m.shortLabel}</span>
+              </div>
+            ))}
+          </div>
+          <figcaption className="sr-only">Monthly spending, last {months.length} months</figcaption>
+        </figure>
+      ) : null}
+    </Card>
+  );
+}
+
+function HouseSummary({ data }: { data: Dash }) {
+  const { house } = data;
+  if (!(house.currentMonthExpenses > 0 || house.totalExpenses > 0 || house.loanInfo.sanctioned > 0)) return null;
+  return (
+    <Card labelledBy="house-heading">
+      <CardHeader id="house-heading" title="House" />
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+        {house.currentMonthExpenses > 0 ? (
+          <MiniStat label="This month" value={formatINR(house.currentMonthExpenses)} />
+        ) : null}
+        {house.totalExpenses > 0 ? <MiniStat label="All months" value={formatINR(house.totalExpenses)} /> : null}
+        {house.loanInfo.sanctioned > 0 ? (
+          <MiniStat
+            label="Loan outstanding"
+            value={formatINR(house.loanInfo.outstanding)}
+            note={`${house.loanInfo.percentagePending}% of ${formatINR(house.loanInfo.sanctioned)}`}
+          />
+        ) : null}
+        {house.loanInfo.emorTotal > 0 ? (
+          <MiniStat
+            label="EMIs remaining"
+            value={`${house.loanInfo.emorOutstanding} / ${house.loanInfo.emorTotal}`}
+            note="months"
+          />
+        ) : null}
+      </div>
+    </Card>
+  );
+}
+
+function RecentWithRemarks({ data, readOnly }: { data: Dash; readOnly: boolean }) {
+  return (
+    <Card labelledBy="recent-heading">
+      <CardHeader id="recent-heading" title="Recent expenses" />
+      {data.recent.length === 0 ? (
+        <p className="text-sm text-ink-soft">
+          {readOnly ? "No expenses yet." : "No expenses yet. Tap + to add your first one."}
+        </p>
+      ) : (
+        <ul className="flex flex-col">
+          {data.recent.map((e) => (
+            <li key={e.id} className="flex items-start justify-between gap-3 border-t border-line py-2.5 first:border-t-0">
+              <div className="min-w-0">
+                <p className="text-sm font-medium text-ink">
+                  {e.label}
+                  <span className="ml-2 font-mono text-xs font-normal text-ink-soft">{e.date}</span>
+                  {e.recurring ? <span className="ml-2 text-xs text-warn">monthly</span> : null}
+                </p>
+                {e.remarks ? <p className="mt-0.5 text-sm text-ink-soft">{e.remarks}</p> : null}
+              </div>
+              <p className="shrink-0 font-mono text-sm font-medium text-ink">{formatINR(e.amount)}</p>
+            </li>
+          ))}
+        </ul>
+      )}
+    </Card>
+  );
+}
+
+/** The financial-year detail, kept but folded away so the month comes first. */
+function YearView({ data }: { data: Dash }) {
+  const fy = data.financialYear;
+  return (
+    <details className="group rounded-2xl border border-line bg-white/50">
+      <summary className="flex min-h-14 cursor-pointer list-none items-center justify-between gap-3 px-5 py-3">
+        <span>
+          <span className="block font-display text-base font-semibold text-ink">{fy.selectedLabel} at a glance</span>
+          <span className="block text-sm text-ink-soft">
+            Net {formatINR(fy.totals.profit)} over {fy.months.length} months · tap to{" "}
+            <span className="group-open:hidden">open</span>
+            <span className="hidden group-open:inline">close</span>
+          </span>
+        </span>
+        <span aria-hidden="true" className="text-xl text-ink-soft transition-transform group-open:rotate-90">
+          ›
+        </span>
+      </summary>
+      <div className="flex flex-col gap-6 border-t border-line px-5 pb-6 pt-5">
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+          <MiniStat label="Income" value={formatINR(fy.totals.income)} note={`${fy.months.length} months`} />
+          <MiniStat label="Expenses" value={formatINR(fy.totals.expense)} note={`${fy.months.length} months`} />
+          <MiniStat label="Net" value={formatINR(fy.totals.profit)} note={`avg ${formatINR(fy.totals.averageMonthlyProfit)} / month`} />
+          <MiniStat
+            label="Best / worst"
+            value={fy.bestMonth.shortLabel + " / " + fy.worstMonth.shortLabel}
+            note={`${formatINR(fy.bestMonth.profit)} / ${formatINR(fy.worstMonth.profit)}`}
+          />
+        </div>
+        <OutflowChart analysis={data.outflow} periodLabel={fy.selectedLabel} />
+        <div>
+          <h3 className="mb-3 text-base font-semibold text-ink">Month by month</h3>
+          <MonthPnLGraph months={fy.months} />
+        </div>
+      </div>
+    </details>
+  );
+}
+
+function RecurringEditDialog({
+  edit,
+  onChange,
+  onClose,
+  onSaved,
+}: {
+  edit: RecurringEditState | null;
+  onChange: (next: RecurringEditState | null) => void;
+  onClose: () => void;
+  onSaved: () => Promise<void>;
+}) {
+  const ref = useRef<HTMLDialogElement>(null);
+  const titleId = useId();
+  const [error, setError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    const dialog = ref.current;
+    if (!dialog) return;
+    if (edit && !dialog.open) dialog.showModal();
+    else if (!edit && dialog.open) dialog.close();
+  }, [edit]);
+
+  async function save(e: React.FormEvent) {
+    e.preventDefault();
+    if (!edit) return;
+    const fd = new FormData();
+    fd.set("date", edit.date);
+    fd.set("label", edit.title.trim());
+    fd.set("amount", edit.amount);
+    fd.set("remarks", edit.remarks);
+    fd.set("recurring", "true");
+    fd.set("renewalDate", edit.nextDate);
+    fd.set("customFields", edit.customFields || "{}");
+    setSaving(true);
+    setError(null);
+    const res = await recordRecurringDebit(edit.id, fd);
+    if (res?.error) {
+      setError(res.error);
+      setSaving(false);
+      return;
+    }
+    await onSaved();
+    setSaving(false);
+  }
+
+  const set = (patch: Partial<RecurringEditState>) => edit && onChange({ ...edit, ...patch });
+
+  return (
+    <dialog
+      ref={ref}
+      className="sheet"
+      aria-labelledby={titleId}
+      onClose={() => {
+        setError(null);
+        onClose();
+      }}
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+    >
+      {edit ? (
+        <form onSubmit={save} className="flex flex-col gap-4 p-5 pb-7">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <h2 id={titleId} className="text-lg font-semibold">
+                Record {edit.title}
+              </h2>
+              <p className="text-sm text-ink-soft">Adds this month&apos;s payment to Expenses and moves the next date.</p>
+            </div>
+            <button
+              type="button"
+              onClick={onClose}
+              aria-label="Close"
+              className="-mr-2 flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-ink-soft hover:bg-paper-deep"
+            >
+              <CloseIcon />
+            </button>
+          </div>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <label className="flex flex-col gap-1.5">
+              <span className="text-sm text-ink-soft">Paid on</span>
+              <input className="field rounded-xl" type="date" required value={edit.date} onChange={(e) => set({ date: e.target.value })} />
+            </label>
+            <label className="flex flex-col gap-1.5">
+              <span className="text-sm text-ink-soft">Amount (₹)</span>
+              <input
+                className="field rounded-xl"
+                type="number"
+                step="any"
+                inputMode="decimal"
+                required
+                value={edit.amount}
+                onChange={(e) => set({ amount: e.target.value })}
+              />
+            </label>
+            <label className="flex flex-col gap-1.5 sm:col-span-2">
+              <span className="text-sm text-ink-soft">Next date</span>
+              <input className="field rounded-xl" type="date" required value={edit.nextDate} onChange={(e) => set({ nextDate: e.target.value })} />
+            </label>
+            <label className="flex flex-col gap-1.5 sm:col-span-2">
+              <span className="text-sm text-ink-soft">Remarks</span>
+              <textarea className="field min-h-20 resize-y rounded-xl" value={edit.remarks} onChange={(e) => set({ remarks: e.target.value })} />
+            </label>
+          </div>
+          {error ? (
+            <p role="alert" className="text-sm text-coral">
+              {error}
+            </p>
+          ) : null}
+          <button type="submit" disabled={saving} className="btn-primary min-h-12 rounded-2xl text-base font-semibold disabled:opacity-60">
+            {saving ? "Saving…" : "Record payment"}
+          </button>
+        </form>
+      ) : null}
+    </dialog>
   );
 }
 
@@ -626,12 +710,12 @@ function MonthPnLGraph({
         const incomeBar = Math.max(8, Math.round((month.income / maxFlow) * 100));
         const expenseBar = Math.max(8, Math.round((month.expense / maxFlow) * 100));
         return (
-          <div key={month.key} className="min-w-0 border border-line bg-white/80 p-4 shadow-[0_10px_24px_rgba(20,36,30,0.08)]">
+          <div key={month.key} className="min-w-0 rounded-xl border border-line bg-white/70 p-4">
             <div className="flex items-start justify-between gap-2">
               <p className="font-semibold text-ink">{month.shortLabel}</p>
               <div className="min-w-0 text-right">
                 <span
-                  className={`block font-mono text-[10px] uppercase tracking-wide ${
+                  className={`block text-xs font-medium ${
                     month.status === "profit"
                       ? "text-mint"
                       : month.status === "loss"
@@ -639,17 +723,16 @@ function MonthPnLGraph({
                         : "text-ink-soft"
                   }`}
                 >
-                  {month.status}
+                  {month.status === "profit" ? "Saved" : month.status === "loss" ? "Overspent" : "Even"}
                 </span>
-                <span className={`mt-1 inline-block max-w-full whitespace-nowrap rounded-full border border-line/80 px-2 py-0.5 font-mono text-[10px] ${deltaTone}`}>
+                <span className={`mt-1 inline-block max-w-full whitespace-nowrap rounded-full border border-line/80 px-2 py-0.5 font-mono text-[11px] ${deltaTone}`}>
                   {deltaLabel}
                 </span>
               </div>
             </div>
-            <p className="mt-2 font-mono text-xs text-ink-soft">{month.label}</p>
-            <div className="mt-3 h-2.5 w-full bg-paper-deep">
+            <div className="mt-3 h-2.5 w-full rounded-full bg-paper-deep">
               <div
-                className={month.status === "loss" ? "h-full bg-coral" : "h-full bg-mint"}
+                className={`h-full rounded-full ${month.status === "loss" ? "bg-coral" : "bg-mint-bright"}`}
                 style={{ width: `${bar}%` }}
               />
             </div>
@@ -662,88 +745,26 @@ function MonthPnLGraph({
             </p>
             <div className="mt-2 space-y-1.5">
               <div className="flex items-center gap-2">
-                <span className="w-7 shrink-0 font-mono text-[10px] text-mint">IN</span>
-                <div className="h-1.5 flex-1 bg-paper-deep">
-                  <div className="h-full bg-mint" style={{ width: `${incomeBar}%` }} />
+                <span className="w-8 shrink-0 text-[11px] text-ink-soft">In</span>
+                <div className="h-1.5 flex-1 rounded-full bg-paper-deep">
+                  <div className="h-full rounded-full bg-mint-bright" style={{ width: `${incomeBar}%` }} />
                 </div>
               </div>
               <div className="flex items-center gap-2">
-                <span className="w-7 shrink-0 font-mono text-[10px] text-coral">OUT</span>
-                <div className="h-1.5 flex-1 bg-paper-deep">
-                  <div className="h-full bg-coral" style={{ width: `${expenseBar}%` }} />
+                <span className="w-8 shrink-0 text-[11px] text-ink-soft">Out</span>
+                <div className="h-1.5 flex-1 rounded-full bg-paper-deep">
+                  <div className="h-full rounded-full bg-coral" style={{ width: `${expenseBar}%` }} />
                 </div>
               </div>
             </div>
-            <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 font-mono text-[11px]">
-              <span className="whitespace-nowrap text-mint">In {formatINR(month.income)}</span>
-              <span className="text-ink-soft">·</span>
-              <span className="whitespace-nowrap text-coral">Out {formatINR(month.expense)}</span>
+            <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 font-mono text-[11px] text-ink-soft">
+              <span className="whitespace-nowrap">In {formatINR(month.income)}</span>
+              <span>·</span>
+              <span className="whitespace-nowrap">Out {formatINR(month.expense)}</span>
             </div>
           </div>
         );
       })}
-    </div>
-  );
-}
-
-function TilePopover({ tile }: { tile: Tile }) {
-  return (
-    <div>
-      <p className="text-sm font-bold text-white">{tile.label}</p>
-      <dl className="mt-3 space-y-1.5 font-mono text-[11px]">
-        <div className="flex items-center justify-between gap-4">
-          <dt className="text-white/55">Share of spend</dt>
-          <dd className="font-medium text-white">{tile.share}%</dd>
-        </div>
-        <div className="flex items-center justify-between gap-4">
-          <dt className="text-white/55">Total</dt>
-          <dd className="font-medium text-white">{formatINR(tile.amount)}</dd>
-        </div>
-        <div className="flex items-center justify-between gap-4">
-          <dt className="text-white/55">Entries</dt>
-          <dd className="font-medium text-white">{tile.items.length}</dd>
-        </div>
-      </dl>
-      <ul className="mt-3 max-h-40 space-y-2 overflow-y-auto border-t border-white/10 pt-3">
-        {tile.items.map((item) => (
-          <li key={item.id} className="flex items-start justify-between gap-3 text-xs">
-            <div className="min-w-0">
-              <p className="font-mono text-[10px] text-white/45">{item.date}</p>
-              <p className="truncate text-white/90">
-                {item.remarks?.trim() ? item.remarks : tile.label}
-                {item.recurring ? (
-                  <span className="ml-1.5 font-mono text-[9px] text-[#f0a35a]">recurring</span>
-                ) : null}
-              </p>
-            </div>
-            <p className="shrink-0 font-mono font-medium text-white">{formatINR(item.amount)}</p>
-          </li>
-        ))}
-      </ul>
-    </div>
-  );
-}
-
-function Stat({
-  label,
-  value,
-  note,
-  accent,
-}: {
-  label: string;
-  value: number;
-  note: string;
-  accent?: boolean;
-}) {
-  const valueTone = accent ? (value < 0 ? "text-coral" : "text-mint") : "text-ink";
-
-  return (
-    <div className="summary-tile border border-line bg-white/50 p-5">
-      <p className="font-mono text-[11px] uppercase tracking-wider text-ink-soft">{label}</p>
-      <p className={`summary-value number-tick mt-3 font-bold ${valueTone}`}>
-        <AnimatedNumber value={value} format={(n) => formatINR(n)} />
-      </p>
-      <p className="mt-2 font-mono text-xs text-ink-soft">{note}</p>
     </div>
   );
 }

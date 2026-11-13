@@ -22,8 +22,9 @@ export function AnimatedNumber({
   useEffect(() => {
     let frame = 0;
     const start = performance.now();
+    const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     const tick = (now: number) => {
-      const t = Math.min(1, (now - start) / duration);
+      const t = reduceMotion ? 1 : Math.min(1, (now - start) / duration);
       const eased = 1 - Math.pow(1 - t, 3);
       setDisplay(Math.round(value * eased));
       if (t < 1) frame = requestAnimationFrame(tick);

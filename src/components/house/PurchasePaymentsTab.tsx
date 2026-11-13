@@ -358,14 +358,14 @@ export function PurchasePaymentsTab({
           <div className="flex gap-2">
             <button
               type="button"
-              className={`px-3 py-1.5 text-xs font-medium ${groupMode === "year" ? "bg-ink text-white" : "border border-line text-ink-soft"}`}
+              className={`px-3 py-1.5 text-xs font-medium ${groupMode === "year" ? "bg-ink text-on-ink" : "border border-line text-ink-soft"}`}
               onClick={() => setGroupMode("year")}
             >
               By year
             </button>
             <button
               type="button"
-              className={`px-3 py-1.5 text-xs font-medium ${groupMode === "rate" ? "bg-ink text-white" : "border border-line text-ink-soft"}`}
+              className={`px-3 py-1.5 text-xs font-medium ${groupMode === "rate" ? "bg-ink text-on-ink" : "border border-line text-ink-soft"}`}
               onClick={() => setGroupMode("rate")}
             >
               By rate change

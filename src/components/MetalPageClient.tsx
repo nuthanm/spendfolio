@@ -808,7 +808,7 @@ export function MetalPageClient({
             <button
               type="submit"
               disabled={loading}
-              className="w-full rounded bg-green-600 px-4 py-2 text-sm font-medium text-white hover:bg-green-700 disabled:opacity-50"
+              className="w-full rounded bg-green-600 px-4 py-2 text-sm font-medium text-[#ffffff] hover:bg-green-700 disabled:opacity-50"
             >
               {loading ? (editingTransaction?.type === "buy" ? "Saving..." : "Adding...") : (editingTransaction?.type === "buy" ? "Save Buy Changes" : "Add Purchase")}
             </button>
@@ -884,7 +884,7 @@ export function MetalPageClient({
             <button
               type="submit"
               disabled={loading || holding.totalGrams === 0}
-              className="w-full rounded bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-50"
+              className="w-full rounded bg-red-600 px-4 py-2 text-sm font-medium text-[#ffffff] hover:bg-red-700 disabled:opacity-50"
             >
               {loading ? (editingTransaction?.type === "sell" ? "Saving..." : "Selling...") : (editingTransaction?.type === "sell" ? "Save Sell Changes" : "Sell")}
             </button>
@@ -918,7 +918,7 @@ export function MetalPageClient({
             <button
               type="submit"
               disabled={loading}
-              className="w-full rounded bg-amber-600 px-4 py-2 text-sm font-medium text-white hover:bg-amber-700 disabled:opacity-50"
+              className="w-full rounded bg-amber-600 px-4 py-2 text-sm font-medium text-[#ffffff] hover:bg-amber-700 disabled:opacity-50"
             >
               {loading ? "Updating..." : "Update Rate"}
             </button>
@@ -971,7 +971,7 @@ export function MetalPageClient({
             <button
               type="submit"
               disabled={loading}
-              className="w-full rounded bg-amber-600 px-4 py-2 text-sm font-medium text-white hover:bg-amber-700 disabled:opacity-50"
+              className="w-full rounded bg-amber-600 px-4 py-2 text-sm font-medium text-[#ffffff] hover:bg-amber-700 disabled:opacity-50"
             >
               {loading ? "Saving..." : "Save Goal"}
             </button>

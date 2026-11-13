@@ -62,7 +62,7 @@ export function MobileNav({
             <div className="formula-wash absolute inset-0" aria-hidden />
             <div className="relative flex h-full flex-col">
               <div className="flex items-center justify-between border-b border-line/60 px-5 py-4">
-                <p className="font-[family-name:var(--font-display)] text-xl font-bold tracking-tight text-ink">
+                <p className="font-display text-xl font-bold tracking-tight text-ink">
                   Spendfolio
                 </p>
                 <button

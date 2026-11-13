@@ -207,7 +207,7 @@ export function ViewLinkSection() {
           confirmRevoke ? (
             <>
               <p className="w-full text-sm text-coral">Revoke this link? Anyone using it will lose access.</p>
-              <button type="button" className="bg-coral px-4 py-2 text-sm text-white" disabled={pending} onClick={revoke}>
+              <button type="button" className="bg-coral px-4 py-2 text-sm text-on-ink" disabled={pending} onClick={revoke}>
                 Confirm revoke
               </button>
               <button

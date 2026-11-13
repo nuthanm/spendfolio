@@ -172,7 +172,7 @@ export function PropertyDetailsForm({
                 type="button"
                 className={`px-3 py-1.5 text-xs font-medium transition ${
                   form.propertyType === type
-                    ? "bg-ink text-white"
+                    ? "bg-ink text-on-ink"
                     : "border border-line bg-white/70 text-ink-soft hover:text-ink"
                 }`}
                 onClick={() => setForm((prev) => ({ ...prev, propertyType: type }))}

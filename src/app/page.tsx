@@ -132,7 +132,7 @@ export default function LandingPage() {
       </section>
 
       {/* Privacy / security band */}
-      <section id="privacy" className="border-y border-line/60 bg-ink text-[#f4faf7]">
+      <section id="privacy" className="border-y border-line/60 bg-ink text-on-ink">
         <div className="mx-auto grid max-w-6xl gap-10 px-5 py-16 md:grid-cols-2 md:py-20">
           <div>
             <p className="font-mono text-xs uppercase tracking-[0.2em] text-mint-bright">
@@ -141,7 +141,7 @@ export default function LandingPage() {
             <h2 className="mt-3 text-3xl font-bold tracking-tight md:text-4xl">
               Login. Authenticator. Logout that actually sticks.
             </h2>
-            <p className="mt-4 text-base leading-relaxed text-white/70">
+            <p className="mt-4 text-base leading-relaxed text-on-ink/70">
               After logout, the session is invalidated — no silent re-entry. Changing password
               always asks for 2FA. Enable or disable authenticator from Account.
             </p>
@@ -155,7 +155,7 @@ export default function LandingPage() {
             ].map((item) => (
               <div key={item.t} className="border border-white/15 bg-white/5 p-4">
                 <p className="font-semibold">{item.t}</p>
-                <p className="mt-1 text-sm text-white/65">{item.d}</p>
+                <p className="mt-1 text-sm text-on-ink/65">{item.d}</p>
               </div>
             ))}
           </div>

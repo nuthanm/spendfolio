@@ -1,20 +1,9 @@
 "use client";
 
-import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { logoutAction } from "@/lib/actions/auth";
 import type { WealthModule } from "@/lib/modules";
-import { MODULE_ROUTES } from "@/lib/modules";
-import { MobileNav } from "@/components/MobileNav";
+import { AppShell } from "@/components/AppShell";
 
-const BASE_NAV = [
-  { href: "/dashboard", label: "Dashboard" },
-  { href: "/income", label: "Income" },
-  { href: "/expenses", label: "Expenses" },
-  { href: "/import", label: "Import" },
-  { href: "/account", label: "Account" },
-];
-
+/** Kept for existing pages; the shell is shared with {@link AppShell}. */
 export function AppShellWithModules({
   children,
   title,
@@ -26,57 +15,9 @@ export function AppShellWithModules({
   subtitle?: string;
   enabledModules?: WealthModule[];
 }) {
-  const pathname = usePathname();
-
-  const nav = [
-    ...BASE_NAV.slice(0, 3),
-    ...enabledModules.map((m) => ({
-      href: MODULE_ROUTES[m].href,
-      label: MODULE_ROUTES[m].label,
-    })),
-    ...BASE_NAV.slice(3),
-  ];
-
   return (
-    <div className="formula-wash min-h-screen">
-      <header className="border-b border-line/60 bg-white/40 backdrop-blur-md">
-        <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-5 py-3 sm:py-4">
-          <Link
-            href="/dashboard"
-            className="font-[family-name:var(--font-display)] text-xl font-bold tracking-tight text-ink"
-          >
-            Spendfolio
-          </Link>
-          <nav className="app-nav hidden items-center gap-6 text-sm text-ink-soft md:flex">
-            {nav.map((item) => (
-              <Link
-                key={item.href}
-                href={item.href}
-                data-active={pathname === item.href}
-                className="relative transition-colors hover:text-ink"
-              >
-                {item.label}
-              </Link>
-            ))}
-          </nav>
-          <div className="flex items-center gap-2">
-            <MobileNav items={nav} />
-            <form action={logoutAction}>
-              <button type="submit" className="btn-secondary px-3 py-1.5 text-xs">
-                Log out
-              </button>
-            </form>
-          </div>
-        </div>
-      </header>
-
-      <main className="mx-auto min-w-0 max-w-6xl px-5 py-6 sm:py-8">
-        <div className="mb-8 anim-rise">
-          <h1 className="text-3xl font-bold tracking-tight text-ink md:text-4xl">{title}</h1>
-          {subtitle ? <p className="mt-2 max-w-2xl text-ink-soft">{subtitle}</p> : null}
-        </div>
-        {children}
-      </main>
-    </div>
+    <AppShell title={title} subtitle={subtitle} enabledModules={enabledModules}>
+      {children}
+    </AppShell>
   );
 }

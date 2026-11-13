@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { AppShell } from "@/components/AppShell";
+import { DATA_CHANGED_EVENT } from "@/components/QuickAddSheet";
 import {
   addExpense,
   addFieldDef,
@@ -121,6 +122,13 @@ export default function ExpensesClient({
   function refresh() {
     setReloadKey((key) => key + 1);
   }
+
+  useEffect(() => {
+    if (readOnly) return undefined;
+    const onChanged = () => setReloadKey((key) => key + 1);
+    window.addEventListener(DATA_CHANGED_EVENT, onChanged);
+    return () => window.removeEventListener(DATA_CHANGED_EVENT, onChanged);
+  }, [readOnly]);
 
   useEffect(() => {
     if (readOnly && !seeded && process.env.NODE_ENV === "development") {
@@ -548,7 +556,7 @@ export default function ExpensesClient({
                     </p>
                     {e.remarks ? <p className="mt-1 text-sm text-ink-soft">{e.remarks}</p> : null}
                     {e.recurring && e.renewalDate ? (
-                      <p className="mt-1 font-mono text-[11px] text-[#c45f12]">
+                      <p className="mt-1 font-mono text-[11px] text-warn">
                         recurring · next {e.renewalDate}
                       </p>
                     ) : e.renewalDate ? (

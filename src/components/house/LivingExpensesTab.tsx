@@ -348,7 +348,7 @@ export function LivingExpensesTab({
                   <button
                     key={key}
                     type="button"
-                    className={`px-3 py-1.5 text-xs font-medium ${checked ? "bg-ink text-white" : "border border-line text-ink-soft"}`}
+                    className={`px-3 py-1.5 text-xs font-medium ${checked ? "bg-ink text-on-ink" : "border border-line text-ink-soft"}`}
                     onClick={() =>
                       setCompareMonths((prev) =>
                         prev.includes(key) ? prev.filter((item) => item !== key) : [...prev, key],

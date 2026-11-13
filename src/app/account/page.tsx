@@ -14,6 +14,7 @@ import { getEnabledModules, setModuleEnabled } from "@/lib/actions/modules";
 import type { WealthModule } from "@/lib/modules";
 import { WEALTH_MODULES, MODULE_ROUTES } from "@/lib/modules";
 import { ViewLinkSection } from "@/app/account/ViewLinkSection";
+import { ThemePicker } from "@/components/ThemePicker";
 
 export default function AccountPage() {
   const [twoFA, setTwoFA] = useState(true);
@@ -240,6 +241,14 @@ export default function AccountPage() {
         </section>
 
         <section className="border border-line bg-white/50 p-5 anim-rise-delay-2">
+          <h2 className="text-lg font-bold text-ink">Appearance</h2>
+          <p className="mt-2 mb-4 text-sm text-ink-soft">
+            Choose light or dark, or follow your device. Saved on this device.
+          </p>
+          <ThemePicker />
+        </section>
+
+        <section className="border border-line bg-white/50 p-5 anim-rise-delay-2">
           <h2 className="text-lg font-bold text-ink">Two-factor authentication</h2>
           <p className="mt-2 text-sm text-ink-soft">
             Authenticator app required on every login when enabled.
@@ -414,7 +423,7 @@ export default function AccountPage() {
               <input className="field" name="confirm" placeholder="DELETE" required />
               <input className="field font-mono" name="code" placeholder="2FA code" required />
               <div className="flex gap-2">
-                <button type="submit" className="bg-coral px-4 py-2 text-sm text-white" disabled={pending}>
+                <button type="submit" className="bg-coral px-4 py-2 text-sm text-on-ink" disabled={pending}>
                   Confirm delete
                 </button>
                 <button
