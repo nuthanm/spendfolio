@@ -4,6 +4,7 @@ import { useEffect, useState, useTransition } from "react";
 import { AppShellWithModules } from "@/components/AppShellWithModules";
 import {
   changePasswordAction,
+  confirmTotpSetupAction,
   deleteAccountAction,
   setTotpEnabledAction,
 } from "@/lib/actions/auth";
@@ -22,6 +23,7 @@ export default function AccountPage() {
   const [disableCode, setDisableCode] = useState("");
   const [message, setMessage] = useState<string | null>(null);
   const [qr, setQr] = useState<string | null>(null);
+  const [setupCode, setSetupCode] = useState("");
   const [exportType, setExportType] = useState<"expenses" | "gold" | "silver" | "house">("expenses");
   const [expenseScope, setExpenseScope] = useState<"whole" | "month">("whole");
   const [expenseMonth, setExpenseMonth] = useState(() => new Date().toISOString().slice(0, 7));
@@ -286,9 +288,9 @@ export default function AccountPage() {
                     const res = await setTotpEnabledAction(true);
                     if (res.error) setMessage(res.error);
                     else {
-                      setTwoFA(true);
                       setQr(res.qrDataUrl || null);
-                      setMessage("2FA enabled — scan QR if shown.");
+                      setSetupCode("");
+                      setMessage("Scan the QR code, then enter a code to turn 2FA on.");
                     }
                   })
                 }
@@ -301,6 +303,35 @@ export default function AccountPage() {
             <div className="mt-4 text-center">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src={qr} alt="2FA QR" className="mx-auto h-40 w-40" />
+              <div className="mt-3 flex items-center justify-center gap-2">
+                <input
+                  className="field w-32 font-mono text-sm"
+                  placeholder="2FA code"
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
+                  value={setupCode}
+                  onChange={(e) => setSetupCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                />
+                <button
+                  type="button"
+                  className="btn-primary px-4 py-2 text-sm"
+                  disabled={pending || setupCode.length !== 6}
+                  onClick={() =>
+                    startTransition(async () => {
+                      const res = await confirmTotpSetupAction(setupCode);
+                      if (res.error) setMessage(res.error);
+                      else {
+                        setTwoFA(true);
+                        setQr(null);
+                        setSetupCode("");
+                        setMessage("2FA enabled.");
+                      }
+                    })
+                  }
+                >
+                  Confirm
+                </button>
+              </div>
             </div>
           ) : null}
         </section>

@@ -7,6 +7,9 @@ export const SESSION_COOKIE = "spendfolio_session";
 export const PENDING_COOKIE = "spendfolio_pending";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
+const FULL_SESSION_MS = 14 * DAY_MS;
+/** Password-verified but not yet 2FA-verified. Kept short to limit code guessing. */
+const PENDING_SESSION_MS = 10 * 60 * 1000;
 
 function secretKey() {
   const secret = process.env.AUTH_SECRET;
@@ -27,7 +30,7 @@ export function newToken() {
 export async function createSession(userId: string, kind: "pending_2fa" | "full") {
   const token = newToken();
   const tokenHash = hashToken(token);
-  const expiresAt = new Date(Date.now() + (kind === "full" ? 14 : 0.25) * DAY_MS);
+  const expiresAt = new Date(Date.now() + (kind === "full" ? FULL_SESSION_MS : PENDING_SESSION_MS));
 
   await prisma.session.create({
     data: {
@@ -75,6 +78,8 @@ export type AuthUser = {
   email: string;
   totpEnabled: boolean;
   totpSecret: string | null;
+  totpConfirmedAt: Date | null;
+  authLockedUntil: Date | null;
 };
 
 export async function getSessionUser(): Promise<AuthUser | null> {
@@ -99,7 +104,14 @@ export async function getSessionUser(): Promise<AuthUser | null> {
       },
       include: {
         user: {
-          select: { id: true, email: true, totpEnabled: true, totpSecret: true },
+          select: {
+            id: true,
+            email: true,
+            totpEnabled: true,
+            totpSecret: true,
+            totpConfirmedAt: true,
+            authLockedUntil: true,
+          },
         },
       },
     });
@@ -133,7 +145,14 @@ export async function getPendingUser(): Promise<AuthUser | null> {
       },
       include: {
         user: {
-          select: { id: true, email: true, totpEnabled: true, totpSecret: true },
+          select: {
+            id: true,
+            email: true,
+            totpEnabled: true,
+            totpSecret: true,
+            totpConfirmedAt: true,
+            authLockedUntil: true,
+          },
         },
       },
     });
